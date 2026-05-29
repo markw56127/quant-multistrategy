@@ -205,9 +205,12 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     dates = pd.DatetimeIndex(all_dates)
 
     # Sector-level downside vol for exposure scaling (use SPY as market vol proxy)
-    spy_raw  = yf.download("SPY", start=start_date, end=end_date,
-                            auto_adjust=True, progress=False)
-    spy_ret  = np.log(spy_raw["Close"] / spy_raw["Close"].shift(1)).dropna()
+    spy_raw   = yf.download("SPY", start=start_date, end=end_date,
+                             auto_adjust=True, progress=False)
+    spy_close = spy_raw["Close"]
+    if isinstance(spy_close, pd.DataFrame):
+        spy_close = spy_close.iloc[:, 0]
+    spy_ret  = np.log(spy_close / spy_close.shift(1)).dropna()
     spy_dvol = spy_ret.clip(upper=0).rolling(21).std() * np.sqrt(252) * np.sqrt(2)
 
     capital         = float(init_cap)
