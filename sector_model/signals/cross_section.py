@@ -358,12 +358,15 @@ class MomentumRankModel:
     """
 
     _WEIGHTS = {
-        "mom_12_1":          0.40,   # price momentum — persistent within-sector signal
-        "log_market_cap":    0.35,   # size — larger stocks dominate index returns;
-                                     # blending with momentum avoids overweighting
-                                     # large but falling names (e.g., INTC in 2024)
-        "eps_growth_yoy":    0.15,   # fundamental confirmation — rewards acceleration
-        "revenue_growth_yoy":0.10,   # revenue momentum — more stable than EPS
+        "mom_12_1":          0.50,   # price momentum — primary driver, captures
+                                     # stocks growing INTO large-cap (NVDA 2023-24)
+        "eps_growth_yoy":    0.25,   # fundamental confirmation
+        "revenue_growth_yoy":0.25,   # revenue momentum (more stable than EPS)
+        # log_market_cap intentionally excluded: it's a LAGGING indicator — the
+        # stock that will outperform is often smaller than today's mega-cap.
+        # NVDA was $1.2T vs AAPL's $2.9T at start of 2024; cap-weighting would
+        # have underweighted it. log_market_cap stays in FEATURE_COLS for future
+        # LightGBM use where it can be combined non-linearly with momentum.
     }
 
     def __init__(self, cfg: dict = None):
