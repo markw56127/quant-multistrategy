@@ -393,16 +393,13 @@ class MomentumRankModel:
     """
 
     _WEIGHTS = {
-        "mom_12_1":          0.55,   # 12-1 month price momentum — cross-regime signal
+        "mom_12_1":          0.55,   # 12-1 month price momentum — primary cross-regime signal
         "eps_growth_yoy":    0.25,   # fundamental confirmation
-        "revenue_growth_yoy":0.20,   # revenue momentum (more stable than EPS)
-        "vol_ratio":        -0.25,   # quality filter: penalise 2× sector vol names
-        # high_52w_ratio and revenue_acceleration are in FEATURE_COLS for LightGBM
-        # but excluded here: both are bull-market signals that hurt at peak/reversal.
-        # high_52w_ratio picks stocks near their annual high — wrong in Jan 2022.
-        # revenue_acceleration was positive for growth stocks going into 2022.
-        # LightGBM can use them conditionally (regime interaction); a fixed-weight
-        # composite cannot, so they do more harm than good in a bear-market year.
+        "revenue_growth_yoy":0.20,   # revenue momentum (SEC EDGAR, real data now)
+        # vol_ratio removed: was added to penalise IPO crash stocks (CRWD/DDOG).
+        # With those excluded by the 20% threshold, the penalty was down-ranking
+        # legitimate high-momentum names in Financials/Staples during 2022.
+        # high_52w_ratio, revenue_acceleration in FEATURE_COLS for future LightGBM.
     }
 
     def __init__(self, cfg: dict = None):
