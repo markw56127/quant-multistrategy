@@ -417,8 +417,8 @@ class MomentumRankModel:
         except KeyError:
             return pd.Series(dtype=float)
 
-        composite = pd.Series(0.0, index=day.index)
-        total_w   = 0.0
+        composite    = pd.Series(0.0, index=day.index)
+        pos_w_total  = 0.0   # sum of positive weights (for normalisation)
 
         for col, w in self._WEIGHTS.items():
             if col not in day.columns:
@@ -428,10 +428,12 @@ class MomentumRankModel:
                 continue
             z = (vals - vals.mean()) / vals.std()
             composite = composite.add(w * z, fill_value=0.0)
-            total_w += w
+            if w > 0:
+                pos_w_total += w   # normalise by positive weight only so a
+                                   # present/absent vol_ratio doesn't rescale scores
 
-        if total_w > 0:
-            composite /= total_w
+        if pos_w_total > 0:
+            composite /= pos_w_total
 
         return composite.rename("alpha_score")
 
