@@ -107,11 +107,24 @@ def load_sector_data(
     all_tickers = cfg["universe"] + [cfg["sector_etf"]]
     prices = fetch_prices(all_tickers, cfg["start_date"], cfg["end_date"], cache_dir)
 
-    log_ret = np.log(prices / prices.shift(1)).dropna()
-
     sector_col = cfg["sector_etf"]
+
+    # If the sector ETF was dropped by the missing-data filter (e.g., XLC
+    # launched Dec 2018 so it has >20% missing on a 2015 start), fetch it
+    # separately over its actual available range and join it in.
+    if sector_col not in prices.columns:
+        logger.info(f"{sector_col} missing from prices — fetching separately")
+        import yfinance as yf
+        etf_raw = yf.download(sector_col, start=cfg["start_date"],
+                              end=cfg["end_date"], auto_adjust=True, progress=False)
+        etf_close = etf_raw["Close"].rename(sector_col)
+        prices = prices.join(etf_close, how="left")
+
+    log_ret = np.log(prices / prices.shift(1)).dropna(subset=[sector_col])
+    log_ret = log_ret.dropna(how="all")
+
     sector_ret = log_ret[sector_col]
-    stock_ret  = log_ret[[t for t in cfg["universe"] if t in log_ret.columns]]
+    stock_ret  = log_ret[[t for t in cfg["universe"] if t in log_ret.columns]].dropna(how="all")
 
     logger.info(
         f"Loaded {stock_ret.shape[1]} stocks × {len(stock_ret)} days "
