@@ -52,13 +52,14 @@ FEATURE_COLS = [
     "price_vol_corr",     # 21d correlation between daily return and log-vol change.
                           # Positive = price moves confirmed by volume (accumulation).
                           # Negative = price moves on declining volume (weak signal).
-    # ── Fundamentals (available ~2020+) ──────────────────────────────────
-    "eps_surprise",
-    "eps_ttm",
-    "eps_growth_yoy",
-    "eps_acceleration",
-    "eps_revision",
-    "eps_revision_trend",
+    # ── Fundamentals ─────────────────────────────────────────────────────
+    "eps_surprise",          # beat/miss vs naive trailing avg (SEC EDGAR)
+    "eps_ttm",               # trailing-12-month diluted EPS
+    "eps_growth_yoy",        # YoY TTM EPS growth
+    "eps_acceleration",      # change in YoY growth vs 1yr ago
+    "eps_revision",          # analyst estimate revision (yfinance, sparse)
+    "eps_revision_trend",    # rolling sign of revisions (yfinance, sparse)
+    "revenue_growth_yoy",    # YoY quarterly revenue growth (SEC EDGAR)
     "trailing_pe",
     "peg_ratio",
     "pe_rank_cs",
@@ -332,3 +333,64 @@ class CompositeFactorModel:
 
     def feature_importance(self) -> pd.Series:
         return pd.Series(self.weights).sort_values(ascending=False)
+
+
+class MomentumRankModel:
+    """
+    Within-sector stock ranking by 12-1 month price momentum.
+
+    Why use this instead of LightGBM for within-sector selection:
+      - Momentum (Jegadeesh & Titman 1993) is the most replicated factor in
+        finance. Within a sector, the top-momentum names outperform over
+        1-12 month horizons with t-stats > 3 in most studies.
+      - Very low turnover: momentum is persistent, so the same stocks stay
+        near the top for multiple rebalance periods.
+      - No training data required — pure signal, zero overfitting risk.
+      - Combined with sector rotation (Layer 1), this targets the best stocks
+        in the best sectors: the intersection of sector momentum and
+        within-sector stock momentum.
+
+    The model also blends in EPS growth and revenue growth (when available
+    from SEC EDGAR) to distinguish sustained fundamental momentum from
+    pure price momentum. Price-only momentum can reverse on earnings misses;
+    fundamental confirmation reduces this whipsaw.
+    """
+
+    _WEIGHTS = {
+        "mom_12_1":          0.50,   # price momentum, primary driver
+        "eps_growth_yoy":    0.25,   # fundamental confirmation
+        "revenue_growth_yoy":0.25,   # revenue momentum (more stable than EPS)
+    }
+
+    def __init__(self, cfg: dict = None):
+        self.model = True  # sentinel: always "fitted"
+
+    def fit(self, *args, **kwargs) -> None:
+        pass
+
+    def predict(self, features: pd.DataFrame, date: pd.Timestamp) -> pd.Series:
+        try:
+            day = features.xs(date, level="date")
+        except KeyError:
+            return pd.Series(dtype=float)
+
+        composite = pd.Series(0.0, index=day.index)
+        total_w   = 0.0
+
+        for col, w in self._WEIGHTS.items():
+            if col not in day.columns:
+                continue
+            vals = day[col].dropna()
+            if len(vals) < 3 or vals.std() < 1e-8:
+                continue
+            z = (vals - vals.mean()) / vals.std()
+            composite = composite.add(w * z, fill_value=0.0)
+            total_w += w
+
+        if total_w > 0:
+            composite /= total_w
+
+        return composite.rename("alpha_score")
+
+    def feature_importance(self) -> pd.Series:
+        return pd.Series(self._WEIGHTS).sort_values(ascending=False)

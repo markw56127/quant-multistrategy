@@ -107,6 +107,6 @@ def build_sector_cfg(
     cfg["data"]["universe"]   = tickers
     cfg["data"]["sector_etf"] = sector_etf
     cfg["data"]["cache_dir"]  = cache_subdir
-    # 3 high-conviction picks per sector — concentration is the point
-    cfg["portfolio"]["n_long"] = 3
+    # 8 picks per sector: enough to diversify noise, few enough to concentrate alpha
+    cfg["portfolio"]["n_long"] = 8
     return cfg

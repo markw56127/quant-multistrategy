@@ -31,13 +31,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from data.universe import load_sector_data, fetch_volumes
 from data.fundamentals import fetch_fundamental_features
+from data.sec_edgar import fetch_edgar_fundamentals, fetch_cik_map
 from data.sp500 import (
     fetch_sp500_universe, get_sector_tickers,
     build_sector_cfg, SECTOR_ETFS, ACTIVE_SECTORS,
 )
 from signals.residuals import rolling_ols_decompose, forward_cross_sectional_excess
 from signals.sector import SectorRegimeModel
-from signals.cross_section import CrossSectionalModel, build_features
+from signals.cross_section import CrossSectionalModel, MomentumRankModel, build_features
 from signals.sector_rotation import SectorRotationModel, fetch_macro_data
 from portfolio.optimizer import construct_weights
 from backtest.engine import SectorBacktest
@@ -49,18 +50,13 @@ def load_base_config(path: str = "config/sectors/financials.yaml") -> dict:
         return yaml.safe_load(f)
 
 
-def _run_sector_pipeline(sector_name: str, sector_cfg: dict):
+def _run_sector_pipeline(sector_name: str, sector_cfg: dict, cik_map: dict):
     """
     Run the full within-sector pipeline for one GICS sector.
 
-    Returns:
-        stock_ret    : (T, N) daily log-returns
-        sector_ret   : (T,)  sector ETF log-returns
-        features     : (date, ticker) MultiIndex feature panel
-        targets      : (T, N) forward cross-sectional excess returns
-        alpha_model  : fitted (or unfitted) CrossSectionalModel
-        regime_model : fitted SectorRegimeModel
-        residuals    : (T, N) OLS residuals (for vol estimation)
+    Uses SEC EDGAR for fundamental data (reliable filing dates, 2009+)
+    and MomentumRankModel for within-sector stock selection (price momentum
+    + fundamental momentum blend — no fitting, no overfitting).
     """
     cache_dir = sector_cfg["data"]["cache_dir"]
     sig_cfg   = sector_cfg["signals"]
@@ -87,13 +83,23 @@ def _run_sector_pipeline(sector_name: str, sector_cfg: dict):
     tickers = sector_cfg["data"]["universe"]
     volumes = fetch_volumes(tickers, sector_cfg["data"]["start_date"],
                             sector_cfg["data"]["end_date"], cache_dir)
-    fundamentals = fetch_fundamental_features(tickers, prices, stock_ret.index, cache_dir)
+
+    # Prefer SEC EDGAR fundamentals; fall back to yfinance if needed
+    edgar_cache = str(Path(cache_dir) / "edgar")
+    fundamentals = fetch_edgar_fundamentals(
+        tickers, prices, stock_ret.index,
+        cache_dir=edgar_cache, cik_map=cik_map,
+    )
+    if fundamentals.empty:
+        fundamentals = fetch_fundamental_features(tickers, prices, stock_ret.index, cache_dir)
 
     features = build_features(
         stock_ret, residuals, betas, regime_proba, sector_ret,
         fundamentals=fundamentals, volumes=volumes,
     )
-    alpha_model = CrossSectionalModel(sector_cfg["alpha_model"])
+    # MomentumRankModel: price momentum (50%) + EPS growth (25%) + revenue growth (25%)
+    # No fitting required — pure signal, no look-ahead bias, minimal turnover
+    alpha_model = MomentumRankModel()
 
     logger.info(
         f"  {sector_name}: {stock_ret.shape[1]} stocks × {len(stock_ret)} days "
@@ -148,8 +154,13 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     etf_to_sector = {v: k for k, v in SECTOR_ETFS.items() if k in ACTIVE_SECTORS}
     etf_ret = etf_ret.rename(columns=etf_to_sector)
 
+    # ── CIK map for SEC EDGAR ─────────────────────────────────────────────
+    logger.info("═══ Stage 4a: Loading SEC CIK map ═══")
+    cik_map = fetch_cik_map(cache_dir=sp500_cache)
+    logger.info(f"CIK map: {len(cik_map)} tickers")
+
     # ── Per-sector within-sector models ───────────────────────────────────
-    logger.info("═══ Stage 4: Building per-sector models ═══")
+    logger.info("═══ Stage 4b: Building per-sector models ═══")
     pipelines: Dict[str, dict] = {}
     for sector in ACTIVE_SECTORS:
         etf     = SECTOR_ETFS[sector]
@@ -167,7 +178,7 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
             cache_subdir=f"cache/sp500/{sector.lower().replace(' ', '_')}",
         )
         logger.info(f"  ── {sector} ({etf}) — {len(tickers)} candidates ──")
-        result = _run_sector_pipeline(sector, cfg)
+        result = _run_sector_pipeline(sector, cfg, cik_map=cik_map)
         if result:
             result["cfg"] = cfg
             pipelines[sector] = result
