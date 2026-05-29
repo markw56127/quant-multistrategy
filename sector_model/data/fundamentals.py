@@ -120,7 +120,7 @@ def _build_ticker_features(
 
     # ── YoY EPS growth ─────────────────────────────────────────────────────
     # Compare TTM now vs TTM 252 trading days ago (~1 year)
-    ttm_1yr = eps_ttm.shift(252)
+    ttm_1yr = eps_ttm.shift(252).astype(float)  # convert object dtype to float, None → NaN
     with np.errstate(divide="ignore", invalid="ignore"):
         growth = (eps_ttm - ttm_1yr) / ttm_1yr.abs().replace(0, np.nan)
     out["eps_growth_yoy"] = growth.clip(-2, 10)  # cap extreme values
@@ -131,7 +131,7 @@ def _build_ticker_features(
 
     # ── Analyst estimate revision ──────────────────────────────────────────
     # How much did the analyst EPS estimate change vs the previous quarter's estimate?
-    prev_est = est_daily.shift(63)   # ~1 quarter ago
+    prev_est = est_daily.shift(63).astype(float)   # convert object dtype to float, None → NaN
     with np.errstate(divide="ignore", invalid="ignore"):
         revision = (est_daily - prev_est) / prev_est.abs().replace(0, np.nan)
     out["eps_revision"] = revision.clip(-1, 1)
