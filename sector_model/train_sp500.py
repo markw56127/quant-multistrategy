@@ -235,6 +235,15 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
 
     rebal_dates = dates[train_win::rebal_freq]
 
+    # OOS filter: if oos_start set, only trade from that date forward.
+    # The warmup window (train_win days) must still precede the first OOS rebalance,
+    # so the sector rotation model has a full year of ETF history to look back on.
+    oos_start = base_cfg.get("oos_start")
+    if oos_start:
+        oos_ts = pd.Timestamp(oos_start)
+        rebal_dates = rebal_dates[rebal_dates >= oos_ts]
+        logger.info(f"OOS mode: {len(rebal_dates)} rebalances from {oos_ts.date()}")
+
     for rebal_num, rebal_date in enumerate(rebal_dates):
         date_idx = dates.get_loc(rebal_date)
 
@@ -362,13 +371,26 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Two-layer S&P 500 portfolio")
-    parser.add_argument("--config", default="config/sp500.yaml",
-                        help="S&P 500 pipeline config")
-    parser.add_argument("--out", default="results/sp500/backtest.csv")
+    parser.add_argument("--config", default="config/sp500.yaml")
+    parser.add_argument("--out",    default="results/sp500/backtest.csv")
+    parser.add_argument(
+        "--oos-start",
+        default=None,
+        help="OOS start date (YYYY-MM-DD). Data before this date is still used "
+             "by the sector rotation lookback; only rebalances on/after this "
+             "date are executed. Example: --oos-start 2022-01-01",
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
         import yaml
         base_cfg = yaml.safe_load(f)
 
-    run_sp500(base_cfg, out_path=args.out)
+    if args.oos_start:
+        base_cfg["oos_start"] = args.oos_start
+        out = args.out.replace(".csv", f"_oos_{args.oos_start[:4]}.csv")
+        logger.info(f"OOS run: rebalances from {args.oos_start}, saving to {out}")
+    else:
+        out = args.out
+
+    run_sp500(base_cfg, out_path=out)
