@@ -135,8 +135,10 @@ def _quarterly_series(
             continue
 
         df = pd.DataFrame(rows)
-        # Deduplicate: keep most recently filed entry per fiscal period end
+        # Deduplicate by fiscal period end (keep most recently filed version)
         df = df.sort_values("filed").drop_duplicates(subset="period_end", keep="last")
+        # Also deduplicate by filed date — two periods can share a filing date
+        df = df.drop_duplicates(subset="filed", keep="last")
         df = df.set_index("filed")["val"].sort_index()
         return df
 
