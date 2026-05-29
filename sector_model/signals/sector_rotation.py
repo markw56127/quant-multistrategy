@@ -105,16 +105,18 @@ class SectorRotationModel:
         sector_etf_returns: pd.DataFrame,   # (T, n_sectors) daily log-returns
         macro: pd.DataFrame,                 # output of fetch_macro_data()
         sectors: List[str],                  # ordered list matching etf_returns cols
-        momentum_weight: float = 0.60,
-        macro_weight:    float = 0.40,
-        min_sector_alloc: float = 0.05,      # floor: no sector goes to zero
+        momentum_weight:  float = 0.60,
+        macro_weight:     float = 0.40,
+        top_n_sectors:    int   = 4,         # only allocate to the top-N ranked sectors
+        min_sector_alloc: float = 0.10,      # floor within selected sectors
     ):
-        self.etf_ret    = sector_etf_returns
-        self.macro      = macro
-        self.sectors    = sectors
-        self.mom_w      = momentum_weight
-        self.macro_w    = macro_weight
-        self.min_alloc  = min_sector_alloc
+        self.etf_ret      = sector_etf_returns
+        self.macro        = macro
+        self.sectors      = sectors
+        self.mom_w        = momentum_weight
+        self.macro_w      = macro_weight
+        self.top_n        = top_n_sectors
+        self.min_alloc    = min_sector_alloc
 
     def _sector_momentum(self, date: pd.Timestamp) -> pd.Series:
         """12-1 month sector ETF return (Jegadeesh-Titman applied to sectors)."""
@@ -172,12 +174,19 @@ class SectorRotationModel:
 
         composite = self.mom_w * _z(mom_by_sector) + self.macro_w * _z(macro)
 
-        # Softmax → weights
-        exp_s   = np.exp(composite - composite.max())   # subtract max for stability
+        # Keep only the top-N sectors; zero out the rest so capital concentrates
+        if self.top_n and self.top_n < len(composite):
+            cutoff = composite.nlargest(self.top_n).min()
+            composite = composite.where(composite >= cutoff, other=-np.inf)
+
+        # Softmax → weights (sectors zeroed above get weight ~0)
+        exp_s   = np.exp(composite - composite[composite > -np.inf].max())
+        exp_s   = exp_s.where(composite > -np.inf, other=0.0)
         weights = exp_s / exp_s.sum()
 
-        # Apply minimum floor and renormalise
-        weights = weights.clip(lower=self.min_alloc)
+        # Apply floor within selected sectors and renormalise
+        active  = weights > 0
+        weights[active] = weights[active].clip(lower=self.min_alloc)
         weights = weights / weights.sum()
 
         return weights

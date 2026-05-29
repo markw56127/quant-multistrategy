@@ -107,7 +107,6 @@ def build_sector_cfg(
     cfg["data"]["universe"]   = tickers
     cfg["data"]["sector_etf"] = sector_etf
     cfg["data"]["cache_dir"]  = cache_subdir
-    # Scale n_long with sector size: 10 positions for large sectors, 6 for small
-    n_long = max(6, min(12, len(tickers) // 6))
-    cfg["portfolio"]["n_long"] = n_long
+    # 3 high-conviction picks per sector — concentration is the point
+    cfg["portfolio"]["n_long"] = 3
     return cfg

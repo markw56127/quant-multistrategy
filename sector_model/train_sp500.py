@@ -288,15 +288,27 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
                         for s in all_stocks)
         capital   *= (1.0 - turnover * trans_cost)
 
-        # Hold period
+        # Hold period — compute returns and IC in one pass per sector
         end_idx = min(date_idx + rebal_freq, len(dates) - 1)
         period_ret = 0.0
-        for stock, w in new_weights.items():
-            for sec_pipe in pipelines.values():
-                if stock in sec_pipe["stock_ret"].columns:
-                    hold = sec_pipe["stock_ret"].iloc[date_idx:end_idx][stock]
-                    period_ret += w * float(hold.sum())
-                    break
+        ic_values  = []
+        for sector, pipe in pipelines.items():
+            if rebal_date not in pipe["stock_ret"].index:
+                continue
+            hold = pipe["stock_ret"].iloc[date_idx:end_idx]
+            realized = hold.sum()
+            for stock, w in new_weights.items():
+                if stock in realized.index:
+                    period_ret += w * float(realized[stock])
+            # IC: rank correlation of model scores vs realised returns for this sector
+            try:
+                sec_scores = pipe["alpha_model"].predict(pipe["features"], rebal_date)
+                common     = sec_scores.index.intersection(realized.index)
+                if len(common) >= 3:
+                    ic = float(sec_scores[common].corr(realized[common], method="spearman"))
+                    ic_values.append(ic)
+            except Exception:
+                pass
         capital *= (1.0 + period_ret)
 
         # SPY benchmark return for the same window
@@ -308,6 +320,7 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
             "capital":           capital,
             "period_return":     period_ret,
             "benchmark_return":  bench_ret,
+            "ic":                float(np.mean(ic_values)) if ic_values else float("nan"),
             "turnover":          turnover,
             "cost":              turnover * trans_cost,
             "n_stocks":          len(new_weights),
