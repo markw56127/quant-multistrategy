@@ -1,0 +1,64 @@
+data:
+  universe:
+    - NVDA
+    - AVGO
+    - TSM
+    - ASML
+    - AMD
+    - QCOM
+    - AMAT
+    - LRCX
+    - MU
+    - KLAC
+    - MRVL
+    - INTC
+    - TXN
+    - ADI
+    - NXPI
+    - MCHP
+    - "ON"
+    - MPWR
+    - SWKS
+    - TER
+    - ENTG
+    - ACLS
+    - ONTO
+    - FORM
+    - COHU
+  sector_etf: "SMH"
+  start_date: "2015-01-01"
+  end_date:   "2024-12-31"
+  cache_dir:  "cache/data"
+
+signals:
+  ols_window:       60     # rolling OLS beta estimation window (trading days)
+  ols_min_periods:  30
+  forward_horizon:  20     # days ahead to predict idiosyncratic return
+  vol_window:       21     # realized vol lookback (HMM features + risk parity sizing)
+
+regime:
+  n_states:    3           # bear / chop / bull
+  n_iter:      300
+  vol_window:  21
+
+alpha_model:
+  n_estimators:     300
+  num_leaves:       31
+  learning_rate:    0.05
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq:     5
+  min_child_samples: 20
+  early_stopping_rounds: 50
+
+portfolio:
+  n_long:            8        # top-N stocks to hold long
+  max_position_size: 0.20    # hard cap per position
+  # regime exposure: bull=100%, chop=70%, bear=35% (rest in cash)
+
+backtest:
+  initial_capital:    1_000_000
+  rebalance_freq:     20        # trading days between rebalances (~monthly)
+  train_window:       504       # ~2 years of history for each LightGBM fit
+  retrain_every_n:    3         # re-fit LightGBM every N rebalances (~quarterly)
+  transaction_cost:   0.001     # 10bps per trade (one-way)
