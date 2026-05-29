@@ -1,9 +1,11 @@
 """
-Semiconductor universe data loader.
+Sector universe data loader.
 
-SMH (VanEck Semiconductor ETF) top constituents define our stock universe.
-The list is roughly stable over the backtest period; any delistings or late
-IPOs surface as NaNs and are dropped column-wise before modeling.
+The universe and sector ETF are read from config, making this pipeline
+sector-agnostic. See config/sectors/ for pre-built sector configurations.
+
+Any tickers with >20% missing data (late IPOs, delistings) are dropped
+automatically before modeling.
 """
 
 from pathlib import Path
@@ -13,15 +15,6 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 from loguru import logger
-
-SEMI_UNIVERSE: List[str] = [
-    "NVDA", "AVGO", "TSM",  "ASML", "AMD",
-    "QCOM", "AMAT", "LRCX", "MU",   "KLAC",
-    "MRVL", "INTC", "TXN",  "ADI",  "NXPI",
-    "MCHP", "ON",   "MPWR", "SWKS", "TER",
-    "ENTG", "ACLS", "ONTO", "FORM", "COHU",
-]
-SECTOR_ETF = "SMH"
 
 
 def fetch_prices(

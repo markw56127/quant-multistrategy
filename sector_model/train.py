@@ -2,16 +2,20 @@
 Sector model training pipeline.
 
 Stages:
-  1. Fetch semiconductor universe data (cached after first run)
+  1. Fetch sector universe data (cached per sector after first run)
   2. Rolling OLS decomposition → sector beta + idiosyncratic returns
   3. Fit HMM regime model on sector ETF
   4. Build cross-sectional feature panel (MultiIndex date × ticker)
   5. Walk-forward backtest (fits LightGBM quarterly, rebalances monthly)
-  6. Print performance summary; save results and checkpoints
+  6. Print performance summary; save results
 
 Run from the sector_model/ directory:
-  python train.py
-  python train.py --config config/config.yaml --out results/run1.csv
+  python train.py                                        # default: semis
+  python train.py --config config/sectors/it_software.yaml
+  python train.py --config config/sectors/financials.yaml
+  python train.py --config config/sectors/industrials.yaml
+
+Output is written to results/<sector_name>/backtest.csv unless --out is given.
 """
 
 import argparse
@@ -38,7 +42,10 @@ def load_config(path: str) -> dict:
 
 
 def run(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
-    cache_dir = cfg["data"].get("cache_dir", "cache/data")
+    cache_dir   = cfg["data"].get("cache_dir", "cache/data")
+    sector_name = cfg["data"].get("sector_etf", "unknown")
+
+    logger.info(f"═══ Sector: {sector_name} | universe: {len(cfg['data']['universe'])} stocks ═══")
 
     # 1. Data
     logger.info("── Stage 1: Loading sector data ──")
@@ -122,9 +129,17 @@ def run(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sector model training pipeline")
-    parser.add_argument("--config", default="config/config.yaml")
-    parser.add_argument("--out",    default="results/backtest.csv")
+    parser.add_argument("--config", default="config/sectors/semis.yaml")
+    parser.add_argument("--out",    default=None,
+                        help="Output CSV path. Defaults to results/<sector>/backtest.csv")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    run(cfg, out_path=args.out)
+
+    if args.out is None:
+        sector = cfg["data"].get("sector_etf", Path(args.config).stem).lower()
+        out_path = f"results/{sector}/backtest.csv"
+    else:
+        out_path = args.out
+
+    run(cfg, out_path=out_path)

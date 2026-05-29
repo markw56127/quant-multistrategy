@@ -188,5 +188,19 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
 
 
 if __name__ == "__main__":
-    cfg = load_config("config/config.yaml")
-    run_oos_backtest(cfg, train_end="2021-12-31", oos_out="results/backtest_oos.csv")
+    import argparse
+    parser = argparse.ArgumentParser(description="Out-of-sample backtest")
+    parser.add_argument("--config",    default="config/sectors/semis.yaml")
+    parser.add_argument("--train-end", default="2021-12-31")
+    parser.add_argument("--out",       default=None)
+    args = parser.parse_args()
+
+    cfg = load_config(args.config)
+
+    if args.out is None:
+        sector = cfg["data"].get("sector_etf", Path(args.config).stem).lower()
+        oos_out = f"results/{sector}/backtest_oos.csv"
+    else:
+        oos_out = args.out
+
+    run_oos_backtest(cfg, train_end=args.train_end, oos_out=oos_out)
