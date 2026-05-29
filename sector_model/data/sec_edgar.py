@@ -263,8 +263,37 @@ def _build_edgar_features(
             out["revenue_growth_yoy"] = (
                 (rev_daily - rev_1yr) / rev_1yr.abs().replace(0, np.nan)
             ).clip(-1, 5)
+
+        # Revenue acceleration: change in YoY growth rate quarter-over-quarter.
+        # The MOST powerful early signal for explosive moves: NVDA's revenue
+        # growth flipped from +2% to +101% YoY in a single quarter (Feb 2023).
+        # MU's recovery from -57% to +93% showed up 2 quarters before price
+        # went parabolic. This is the second derivative of the revenue story.
+        rev_growth_daily = out["revenue_growth_yoy"]
+        out["revenue_acceleration"] = (
+            rev_growth_daily - rev_growth_daily.shift(63)  # vs ~1 quarter ago
+        ).clip(-3, 3)
     else:
-        out["revenue_growth_yoy"] = np.nan
+        out["revenue_growth_yoy"]   = np.nan
+        out["revenue_acceleration"] = np.nan
+
+    # ── Gross margin ──────────────────────────────────────────────────────
+    # Margin expansion = pricing power before EPS acceleration is visible.
+    # NVDA's gross margin went 53% → 78% as AI demand absorbed supply — this
+    # showed up in the 10-Q one quarter before the stock really took off.
+    cogs_q = _quarterly_series(facts, ["CostOfRevenue", "CostOfGoodsAndServicesSold",
+                                        "CostOfGoodsSold"], unit="USD")
+    if not rev_q.empty and not cogs_q.empty:
+        cogs_q.index = cogs_q.index + pd.Timedelta(days=1)
+        rev_for_gm  = rev_q.reindex(trading_dates).ffill()
+        cogs_for_gm = cogs_q.reindex(trading_dates).ffill()
+        with np.errstate(divide="ignore", invalid="ignore"):
+            gross_margin = ((rev_for_gm - cogs_for_gm) / rev_for_gm.replace(0, np.nan)).clip(0, 1)
+        out["gross_margin"]             = gross_margin
+        out["gross_margin_expansion"]   = (gross_margin - gross_margin.shift(252)).clip(-0.3, 0.3)
+    else:
+        out["gross_margin"]           = np.nan
+        out["gross_margin_expansion"] = np.nan
 
     # ── Market capitalisation ─────────────────────────────────────────────
     # price × shares_outstanding (both point-in-time, no look-ahead bias).

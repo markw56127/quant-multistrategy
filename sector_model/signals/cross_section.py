@@ -62,7 +62,13 @@ FEATURE_COLS = [
     "revenue_growth_yoy",    # YoY quarterly revenue growth (SEC EDGAR)
     "log_market_cap",        # log(price × shares_outstanding) — SEC EDGAR, point-in-time
     "ipo_age_days",          # calendar days since first trade — captures post-IPO momentum
-                             # pattern; NaN before listing so LightGBM ignores pre-existence
+    "high_52w_ratio",        # price / 52-week high — breakout signal (George & Hwang 2004)
+                             # stocks near 52w high break through analyst/institution anchoring
+    "revenue_acceleration",  # QoQ change in YoY revenue growth — catches inflection points
+                             # NVDA: +2%→+101% YoY in one quarter; MU cycle trough flip
+    "gross_margin",          # trailing gross margin level
+    "gross_margin_expansion",# YoY change in gross margin — pricing power signal
+                             # NVDA 53%→78% GM showed up before price went parabolic
     "trailing_pe",
     "peg_ratio",
     "pe_rank_cs",
@@ -116,9 +122,16 @@ def build_features(
             df["reversal_1w"]  = ret.rolling(5).sum().shift(1)
             df["vol_ratio"]    = (stock_vol[ticker] / (sector_vol + 1e-8)).shift(1)
             df["mom_12_1"]     = (ret.rolling(252).sum() - ret.rolling(21).sum()).shift(1)
+
+            # 52-week high proximity: price / max(price, 252d).
+            # Near 1.0 = stock near annual high → breakout candidate.
+            # George & Hwang (2004): strongest predictor among momentum variants.
+            cum_ret    = ret.cumsum().apply(np.exp)   # price index (ratio scale)
+            rolling_hi = cum_ret.rolling(252, min_periods=63).max()
+            df["high_52w_ratio"] = (cum_ret / rolling_hi).shift(1).clip(0, 1)
         else:
             df[["total_mom_1m", "total_mom_3m", "reversal_1w",
-                "vol_ratio", "mom_12_1"]] = np.nan
+                "vol_ratio", "mom_12_1", "high_52w_ratio"]] = np.nan
 
         df["beta"] = b.shift(1)
         df = df.join(regime_proba.shift(1))
@@ -380,15 +393,16 @@ class MomentumRankModel:
     """
 
     _WEIGHTS = {
-        "mom_12_1":          0.55,   # price momentum — primary driver
-        "eps_growth_yoy":    0.25,   # fundamental confirmation
-        "revenue_growth_yoy":0.20,   # revenue momentum
-        "vol_ratio":        -0.25,   # penalty for stocks running 2× sector vol.
-                                     # High-vol momentum names (DDOG, CRWD 2021)
-                                     # lead both the rally AND the crash. A stock
-                                     # with equal momentum but half the vol is
-                                     # strictly preferable. This is the momentum +
-                                     # quality blend: momentum signal, quality filter.
+        "mom_12_1":            0.35,  # 12-1 month price momentum
+        "high_52w_ratio":      0.25,  # proximity to 52-week high — breakout signal.
+                                      # NVDA was at 60% of 52w high in Jan 2023,
+                                      # then broke through after Feb earnings and ran.
+                                      # George & Hwang (2004): strongest momentum variant.
+        "revenue_acceleration":0.20,  # second derivative of revenue growth.
+                                      # Fires at the inflection (NVDA +2%→+101% YoY).
+                                      # The signal that was actually available early.
+        "eps_growth_yoy":      0.15,  # fundamental confirmation (slower, lagging)
+        "vol_ratio":          -0.20,  # quality filter: penalise 2× sector vol names
     }
 
     def __init__(self, cfg: dict = None):
