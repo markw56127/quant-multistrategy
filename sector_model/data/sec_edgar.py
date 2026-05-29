@@ -145,6 +145,41 @@ def _quarterly_series(
     return pd.Series(dtype=float)
 
 
+def _shares_outstanding(facts: dict) -> pd.Series:
+    """
+    Extract shares outstanding time series from the dei (Document and Entity
+    Information) namespace.  Filed on each 10-Q/10-K, so updates quarterly.
+    Returns Series indexed by filing date (shifted +1 day for availability).
+    """
+    dei  = facts.get("facts", {}).get("dei", {})
+    tag  = "EntityCommonStockSharesOutstanding"
+    if tag not in dei:
+        return pd.Series(dtype=float)
+
+    units = dei[tag].get("units", {})
+    entries = units.get("shares", [])
+    if not entries:
+        return pd.Series(dtype=float)
+
+    rows = []
+    for e in entries:
+        if e.get("form", "") not in ("10-Q", "10-K", "10-K/A"):
+            continue
+        try:
+            rows.append({"filed": pd.Timestamp(e["filed"]), "val": float(e["val"])})
+        except Exception:
+            continue
+
+    if not rows:
+        return pd.Series(dtype=float)
+
+    df = pd.DataFrame(rows).sort_values("filed")
+    df = df.drop_duplicates(subset="filed", keep="last")
+    s  = df.set_index("filed")["val"].sort_index()
+    s.index = s.index + pd.Timedelta(days=1)   # available from next trading day
+    return s
+
+
 # ── Per-ticker feature builder ────────────────────────────────────────────────
 
 def _build_edgar_features(
@@ -230,6 +265,19 @@ def _build_edgar_features(
             ).clip(-1, 5)
     else:
         out["revenue_growth_yoy"] = np.nan
+
+    # ── Market capitalisation ─────────────────────────────────────────────
+    # price × shares_outstanding (both point-in-time, no look-ahead bias).
+    # log_market_cap as feature: within a sector, larger = more index weight.
+    # Blending with momentum ensures mega-caps with FALLING momentum are not
+    # blindly overweighted — they need both size AND positive momentum.
+    shares = _shares_outstanding(facts)
+    if not shares.empty:
+        shares_daily = shares.reindex(trading_dates).ffill().bfill()
+        mktcap = price * shares_daily
+        out["log_market_cap"] = np.log(mktcap.clip(lower=1e6))
+    else:
+        out["log_market_cap"] = np.nan
 
     return out
 

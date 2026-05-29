@@ -60,6 +60,7 @@ FEATURE_COLS = [
     "eps_revision",          # analyst estimate revision (yfinance, sparse)
     "eps_revision_trend",    # rolling sign of revisions (yfinance, sparse)
     "revenue_growth_yoy",    # YoY quarterly revenue growth (SEC EDGAR)
+    "log_market_cap",        # log(price × shares_outstanding) — SEC EDGAR, point-in-time
     "trailing_pe",
     "peg_ratio",
     "pe_rank_cs",
@@ -357,9 +358,12 @@ class MomentumRankModel:
     """
 
     _WEIGHTS = {
-        "mom_12_1":          0.50,   # price momentum, primary driver
-        "eps_growth_yoy":    0.25,   # fundamental confirmation
-        "revenue_growth_yoy":0.25,   # revenue momentum (more stable than EPS)
+        "mom_12_1":          0.40,   # price momentum — persistent within-sector signal
+        "log_market_cap":    0.35,   # size — larger stocks dominate index returns;
+                                     # blending with momentum avoids overweighting
+                                     # large but falling names (e.g., INTC in 2024)
+        "eps_growth_yoy":    0.15,   # fundamental confirmation — rewards acceleration
+        "revenue_growth_yoy":0.10,   # revenue momentum — more stable than EPS
     }
 
     def __init__(self, cfg: dict = None):
