@@ -70,6 +70,9 @@ def fetch_sp500_universe(cache_dir: Optional[str] = None) -> pd.DataFrame:
     df = df[["Symbol", "Security", "GICS Sector", "GICS Sub-Industry"]].copy()
     # Normalise ticker format (BRK.B → BRK-B for yfinance)
     df["Symbol"] = df["Symbol"].str.replace(".", "-", regex=False)
+    # Drop Wikipedia parsing artifacts — single-character or non-alpha tickers
+    # are never real S&P 500 symbols; they come from footnote markers in the table
+    df = df[df["Symbol"].str.match(r"^[A-Z]{2,5}(-[A-Z])?$", na=False)]
 
     logger.info(
         f"S&P 500: {len(df)} stocks across {df['GICS Sector'].nunique()} sectors"
