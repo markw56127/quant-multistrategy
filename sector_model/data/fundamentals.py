@@ -79,6 +79,9 @@ def _build_ticker_features(
             out[col] = np.nan
         return out
 
+    # Deduplicate earnings by date (keep first if multiple on same date)
+    earnings = earnings[~earnings.index.duplicated(keep="first")]
+
     # ── EPS series on announcement dates ──────────────────────────────────
     # Shift 1 calendar day so same-day announcements aren't visible yet.
     # (Earnings after market close on date D → available from D+1 onwards.)
