@@ -14,14 +14,14 @@ regime:
   vol_window:  21
 
 alpha_model:
-  n_estimators:         200
-  num_leaves:           15
-  learning_rate:        0.05
-  feature_fraction:     0.7
-  bagging_fraction:     0.8
+  n_estimators:         300
+  num_leaves:           31       # more capacity — ~60 stocks × 504 days = 30k rows/sector
+  learning_rate:        0.03     # slower learning rate with more trees for better generalisation
+  feature_fraction:     0.6      # sample 60% of features per tree — reduces correlation
+  bagging_fraction:     0.7
   bagging_freq:         5
-  min_child_samples:    30
-  early_stopping_rounds: 40
+  min_child_samples:    50       # conservative leaf size — ~50 samples per split
+  early_stopping_rounds: 50
 
 portfolio:
   n_long:            8      # top-8 momentum names per sector
