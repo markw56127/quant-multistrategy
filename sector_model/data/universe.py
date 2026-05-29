@@ -41,21 +41,16 @@ def fetch_prices(
     prices = prices.ffill(limit=5)
     missing_frac = prices.isna().mean()
 
-    # Two-tier filter:
-    # >50% missing → fewer than 5 years of data; too short to include a full
-    #   market cycle (bull + bear). Stocks with only bull-market history create
-    #   momentum-crash risk: the model learns their uptrend but has never seen
-    #   them reverse. PLTR/APP/COIN/HOOD fall here; CRWD/DDOG (5+ yrs) do not.
-    # 20-50% missing → partial history (IPO'd mid-backtest): keep with ipo_age flag
-    # <20% missing → full history, standard treatment
-    hard_drop = missing_frac[missing_frac > 0.50].index.tolist()
+    # Missing-data filter:
+    # >20% missing → drop. Requires stocks to have data for at least 80% of
+    # the backtest window (~8+ years in a 10-year backtest). This ensures every
+    # stock in the universe has lived through at least one full bull-bear cycle,
+    # preventing the model from learning only the uptrend of post-2019 IPOs.
+    # The ipo_age_days feature handles newly listed stocks that DO pass the filter.
+    hard_drop = missing_frac[missing_frac > 0.20].index.tolist()
     if hard_drop:
-        logger.warning(f"Dropping {hard_drop} — >50% missing (<5 yrs history)")
+        logger.warning(f"Dropping {hard_drop} — >20% missing")
         prices = prices.drop(columns=hard_drop)
-
-    partial = missing_frac[(missing_frac > 0.20) & (missing_frac <= 0.50)].index.tolist()
-    if partial:
-        logger.info(f"Partial-history tickers (IPO/late addition): {partial}")
 
     # Keep rows where ≥50% of full-history stocks have data — preserves the full
     # date range even when partial-history tickers are present, avoiding the

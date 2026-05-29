@@ -393,16 +393,16 @@ class MomentumRankModel:
     """
 
     _WEIGHTS = {
-        "mom_12_1":            0.35,  # 12-1 month price momentum
-        "high_52w_ratio":      0.25,  # proximity to 52-week high — breakout signal.
-                                      # NVDA was at 60% of 52w high in Jan 2023,
-                                      # then broke through after Feb earnings and ran.
-                                      # George & Hwang (2004): strongest momentum variant.
-        "revenue_acceleration":0.20,  # second derivative of revenue growth.
-                                      # Fires at the inflection (NVDA +2%→+101% YoY).
-                                      # The signal that was actually available early.
-        "eps_growth_yoy":      0.15,  # fundamental confirmation (slower, lagging)
-        "vol_ratio":          -0.20,  # quality filter: penalise 2× sector vol names
+        "mom_12_1":          0.55,   # 12-1 month price momentum — cross-regime signal
+        "eps_growth_yoy":    0.25,   # fundamental confirmation
+        "revenue_growth_yoy":0.20,   # revenue momentum (more stable than EPS)
+        "vol_ratio":        -0.25,   # quality filter: penalise 2× sector vol names
+        # high_52w_ratio and revenue_acceleration are in FEATURE_COLS for LightGBM
+        # but excluded here: both are bull-market signals that hurt at peak/reversal.
+        # high_52w_ratio picks stocks near their annual high — wrong in Jan 2022.
+        # revenue_acceleration was positive for growth stocks going into 2022.
+        # LightGBM can use them conditionally (regime interaction); a fixed-weight
+        # composite cannot, so they do more harm than good in a bear-market year.
     }
 
     def __init__(self, cfg: dict = None):
