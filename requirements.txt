@@ -1,0 +1,46 @@
+# Core scientific computing
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.11.0
+
+# Machine learning
+scikit-learn>=1.3.0
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Data fetching
+yfinance>=0.2.36
+requests>=2.31.0
+newsapi-python>=0.2.7
+lxml>=4.9.0
+beautifulsoup4>=4.12.0
+curl_cffi>=0.6.0
+
+# Technical indicators
+pandas-ta>=0.3.14b
+
+# LLM / Sentiment
+anthropic>=0.25.0
+transformers>=4.36.0
+
+# Reinforcement learning
+gymnasium>=0.29.0
+stable-baselines3>=2.2.0
+sb3-contrib>=2.2.0          # TRPO and other SB3 extras
+
+# Bayesian / Probabilistic
+pymc>=5.10.0
+
+# Visualization
+plotly>=5.18.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+dash>=2.14.0
+
+# Utilities
+pyyaml>=6.0
+tqdm>=4.66.0
+joblib>=1.3.0
+python-dotenv>=1.0.0
+loguru>=0.7.2
+rich>=13.0.0
