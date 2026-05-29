@@ -31,35 +31,36 @@ data:
   cache_dir:  "cache/data"
 
 signals:
-  ols_window:       60     # rolling OLS beta estimation window (trading days)
+  ols_window:       60
   ols_min_periods:  30
-  forward_horizon:  20     # days ahead to predict idiosyncratic return
-  vol_window:       21     # realized vol lookback (HMM features + risk parity sizing)
+  forward_horizon:  40     # 40d horizon: better alignment with quarterly fundamental signals
+  vol_window:       21
 
 regime:
-  n_states:    3           # bear / chop / bull
+  n_states:    3
   n_iter:      300
   vol_window:  21
 
 alpha_model:
-  n_estimators:     300
-  num_leaves:       31
-  learning_rate:    0.05
-  feature_fraction: 0.8
-  bagging_fraction: 0.8
-  bagging_freq:     5
-  min_child_samples: 20
-  early_stopping_rounds: 50
+  n_estimators:       200    # reduced: 300 trees is too much capacity for 24 stocks
+  num_leaves:         15     # reduced: prevents overfitting to small cross-section
+  learning_rate:      0.05
+  feature_fraction:   0.7    # slightly more aggressive feature dropout
+  bagging_fraction:   0.8
+  bagging_freq:       5
+  min_child_samples:  30     # increased: requires more samples per leaf
+  early_stopping_rounds: 40
 
 portfolio:
-  n_long:            8        # top-N stocks to hold long
-  max_position_size: 0.20    # hard cap per position
-  # regime exposure: bull=100%, chop=70%, bear=35% (rest in cash)
+  n_long:            8
+  max_position_size: 0.20
+  target_vol:        0.15    # annualised portfolio vol target (vol targeting exposure)
+  min_exposure:      0.50    # floor: always at least 50% deployed
+  max_exposure:      1.00
 
 backtest:
   initial_capital:    1_000_000
-  rebalance_freq:     20        # trading days between rebalances (~monthly)
-  train_window:       504       # ~2 years of history for each LightGBM/HMM fit
-  retrain_every_n:    3         # re-fit models every N rebalances (~quarterly)
-  transaction_cost:   0.001     # 10bps per trade (one-way)
-  hmm_vol_window:     21        # realized vol window for HMM features
+  rebalance_freq:     20
+  train_window:       504
+  retrain_every_n:    3
+  transaction_cost:   0.001

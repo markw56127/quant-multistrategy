@@ -1,19 +1,21 @@
 """
 Portfolio construction: translate alpha scores into long-only position weights.
 
-Strategy:
-  - Pick the top N stocks by alpha score
-  - Size by inverse volatility (equal risk contribution per position)
-  - Scale gross exposure continuously by HMM bull probability
-  - Remainder sits in cash (no margin, no shorting)
+Exposure management — volatility targeting (Moreira & Muir 2017, JF):
+  Scale gross exposure inversely with realised sector volatility to maintain
+  a roughly constant risk budget.
 
-Exposure scaling:
-  gross = MIN_EXPOSURE + (MAX_EXPOSURE - MIN_EXPOSURE) * bull_prob
+      exposure = clip( target_vol / sector_vol_ann, min_exposure, max_exposure )
 
-  This avoids the hard threshold problem where the portfolio snaps from
-  100% to 35% exposure as soon as one state tips to bear. Instead, exposure
-  drifts smoothly as regime evidence accumulates. With bull_prob=1.0 the
-  portfolio is fully deployed; with bull_prob=0.0 it sits at 35% (floor).
+  Intuition: when the market is calm (low vol), deploy fully — that's when
+  carrying risk is cheapest.  When vol spikes (crashes, dislocations), reduce
+  exposure automatically — that's when unexpected moves are largest.
+
+  This is principled rather than regime-fitted: you're not predicting bear vs
+  bull, you're responding to a directly observable risk signal (realised vol)
+  that is known to be short-term persistent (vol clustering).
+
+  Reference: Moreira & Muir (2017) "Volatility-Managed Portfolios", JF 72(4).
 """
 
 import numpy as np
@@ -21,30 +23,36 @@ import pandas as pd
 from loguru import logger
 
 
-MIN_EXPOSURE = 0.35   # floor: still deployed even in worst bear
-MAX_EXPOSURE = 1.00   # ceiling: fully deployed in pure bull
-
-
 def construct_weights(
-    scores:    pd.Series,
-    vol:       pd.Series,
-    bull_prob: float,
-    n_long:    int   = 8,
-    max_pos:   float = 0.20,
+    scores:          pd.Series,
+    stock_vol:       pd.Series,
+    sector_vol_ann:  float,
+    n_long:          int   = 8,
+    max_pos:         float = 0.20,
+    target_vol:      float = 0.15,
+    min_exposure:    float = 0.50,
+    max_exposure:    float = 1.00,
 ) -> pd.Series:
     """
     Build a long-only weight vector from cross-sectional alpha scores.
 
     Args:
-        scores    : alpha score per stock (higher = more attractive long)
-        vol       : realized vol per stock (inverse-vol sizing)
-        bull_prob : HMM posterior probability of bull regime (0–1)
-        n_long    : number of long positions to hold
-        max_pos   : hard cap on any single position weight
+        scores          : alpha score per stock (higher = more attractive long)
+        stock_vol       : per-stock 21-day realised vol (for inverse-vol sizing)
+        sector_vol_ann  : sector (SMH) annualised realised vol — drives exposure
+        n_long          : number of long positions to hold
+        max_pos         : hard cap on any single position weight
+        target_vol      : target annualised portfolio volatility
+        min_exposure    : floor gross exposure (always at least this deployed)
+        max_exposure    : ceiling gross exposure
     Returns:
-        weights   : Series summing to <= gross_target. No short positions.
+        weights         : Series of non-negative weights. Sums to gross_target.
     """
-    gross_target = MIN_EXPOSURE + (MAX_EXPOSURE - MIN_EXPOSURE) * float(bull_prob)
+    # Vol-targeted gross exposure
+    if sector_vol_ann > 1e-6:
+        gross_target = np.clip(target_vol / sector_vol_ann, min_exposure, max_exposure)
+    else:
+        gross_target = max_exposure
 
     ranked = scores.rank(ascending=False)
     longs  = ranked[ranked <= n_long].index
@@ -53,9 +61,10 @@ def construct_weights(
         logger.debug("No valid scores — holding cash")
         return pd.Series(0.0, index=scores.index)
 
-    v     = vol.reindex(longs).fillna(vol.mean())
+    v     = stock_vol.reindex(longs).fillna(stock_vol.mean())
     inv_v = 1.0 / (v + 1e-8)
     raw_w = inv_v / inv_v.sum()
+
     weights = pd.Series(0.0, index=scores.index)
     weights[longs] = raw_w * gross_target
 
@@ -64,7 +73,7 @@ def construct_weights(
         weights = weights / weights.sum() * gross_target
 
     logger.debug(
-        f"Portfolio: longs={longs.tolist()} | bull_prob={bull_prob:.2f} "
+        f"Portfolio: longs={longs.tolist()} | sector_vol={sector_vol_ann:.1%} "
         f"| gross={weights.sum():.2f} | cash={1 - weights.sum():.2f}"
     )
     return weights

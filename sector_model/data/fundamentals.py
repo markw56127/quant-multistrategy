@@ -136,6 +136,18 @@ def _build_ticker_features(
         revision = (est_daily - prev_est) / prev_est.abs().replace(0, np.nan)
     out["eps_revision"] = revision.clip(-1, 1)
 
+    # ── Estimate revision trend (direction consistency) ────────────────────
+    # Sign of revision at each quarterly announcement date (+1 up, -1 down).
+    # Rolling 4-quarter sum → ranges from -4 (all down) to +4 (all up).
+    # Backed by earnings estimate revision literature (Hawkins et al. 1984,
+    # Stickel 1991): stocks with persistent upward revisions outperform.
+    rev_sign = pd.Series(
+        np.sign(est_ann.values - est_ann.shift(1).values),
+        index=est_ann.index,
+    )
+    rev_trend_q = rev_sign.rolling(4, min_periods=2).sum()
+    out["eps_revision_trend"] = rev_trend_q.reindex(trading_dates).ffill()
+
     # ── Trailing P/E ───────────────────────────────────────────────────────
     price = daily_prices.reindex(trading_dates).ffill()
     valid_ttm = eps_ttm.where(eps_ttm > 0)          # P/E undefined for negative EPS

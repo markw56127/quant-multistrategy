@@ -36,14 +36,20 @@ FEATURE_COLS = [
     "regime_0",       # HMM bear probability
     "regime_1",       # HMM chop probability
     "regime_2",       # HMM bull probability
+    # ── Cross-sectional price factors ────────────────────────────────────
+    "mom_12_1",       # 12-month return minus last month (Jegadeesh & Titman 1993)
+                      # skips the 1-month reversal while preserving medium-term drift
     # ── Fundamental (available ~2020+; NaN for earlier dates) ────────────
-    "eps_surprise",       # % EPS surprise vs analyst estimate at most recent earnings
-    "eps_ttm",            # trailing 12-month EPS
-    "eps_growth_yoy",     # TTM EPS growth vs same TTM one year prior
-    "eps_acceleration",   # change in YoY growth rate (is growth speeding up?)
-    "eps_revision",       # analyst EPS estimate change vs prior quarter's estimate
-    "trailing_pe",        # price / TTM EPS
-    "peg_ratio",          # trailing P/E / (EPS growth × 100)
+    "eps_surprise",        # % EPS surprise vs analyst estimate at most recent earnings
+    "eps_ttm",             # trailing 12-month EPS
+    "eps_growth_yoy",      # TTM EPS growth vs same TTM one year prior
+    "eps_acceleration",    # change in YoY growth rate (is growth speeding up?)
+    "eps_revision",        # analyst EPS estimate change vs prior quarter's estimate
+    "eps_revision_trend",  # rolling 4-quarter sum of revision direction (-4 to +4)
+    "trailing_pe",         # price / TTM EPS
+    "peg_ratio",           # trailing P/E / (EPS growth × 100)
+    "pe_rank_cs",          # cross-sectional percentile rank of P/E within universe
+                           # 0=cheapest, 1=most expensive relative to peers today
 ]
 
 
@@ -86,8 +92,12 @@ def build_features(
             df["total_mom_3m"] = (ret - sector_returns).rolling(63).sum().shift(1)
             df["reversal_1w"]  = ret.rolling(5).sum().shift(1)
             df["vol_ratio"]    = (stock_vol[ticker] / (sector_vol + 1e-8)).shift(1)
+            # 12-1 momentum: 12-month cumulative return skipping last month.
+            # The skip removes the short-term reversal while preserving the
+            # medium-term trend documented by Jegadeesh & Titman (1993).
+            df["mom_12_1"] = (ret.rolling(252).sum() - ret.rolling(21).sum()).shift(1)
         else:
-            df[["total_mom_1m", "total_mom_3m", "reversal_1w", "vol_ratio"]] = np.nan
+            df[["total_mom_1m", "total_mom_3m", "reversal_1w", "vol_ratio", "mom_12_1"]] = np.nan
 
         df["beta"] = b.shift(1)
         df = df.join(regime_proba.shift(1))
@@ -103,6 +113,16 @@ def build_features(
     if fundamentals is not None:
         fund_cols = [c for c in fundamentals.columns if c in FEATURE_COLS]
         panel = panel.join(fundamentals[fund_cols], how="left")
+
+    # Cross-sectional P/E rank: computed across all tickers at each date.
+    # Ranks the trailing_pe within the universe so the model sees relative
+    # valuation (cheap vs expensive vs peers) not just absolute P/E level.
+    if "trailing_pe" in panel.columns:
+        panel["pe_rank_cs"] = (
+            panel["trailing_pe"]
+            .groupby(level="date")
+            .rank(pct=True, na_option="keep")
+        )
 
     return panel
 
