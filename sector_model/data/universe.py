@@ -117,7 +117,11 @@ def load_sector_data(
         import yfinance as yf
         etf_raw = yf.download(sector_col, start=cfg["start_date"],
                               end=cfg["end_date"], auto_adjust=True, progress=False)
-        etf_close = etf_raw["Close"].rename(sector_col)
+        close = etf_raw["Close"]
+        # yfinance returns DataFrame with MultiIndex for single ticker in newer versions
+        if isinstance(close, pd.DataFrame):
+            close = close.iloc[:, 0]
+        etf_close = close.rename(sector_col)
         prices = prices.join(etf_close, how="left")
 
     log_ret = np.log(prices / prices.shift(1)).dropna(subset=[sector_col])
