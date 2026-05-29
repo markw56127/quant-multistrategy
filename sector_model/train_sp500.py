@@ -130,7 +130,11 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     raw = yf.download(etf_tickers, start=start_date, end=end_date,
                       auto_adjust=True, progress=False)
     etf_prices = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
-    etf_prices = etf_prices.ffill(limit=5).dropna()
+    # Drop columns that are entirely NaN, then ffill gaps, then drop rows with any remaining NaN
+    etf_prices = etf_prices.dropna(axis=1, how="all").ffill(limit=5).dropna()
+    if etf_prices.empty:
+        raise RuntimeError("No sector ETF data available for backtest period")
+    logger.info(f"Sector ETF prices: {len(etf_prices)} trading days, {etf_prices.shape[1]} sectors")
     etf_ret    = np.log(etf_prices / etf_prices.shift(1)).dropna()
     # Rename columns from ETF tickers back to sector names
     etf_to_sector = {v: k for k, v in SECTOR_ETFS.items() if k in ACTIVE_SECTORS}
