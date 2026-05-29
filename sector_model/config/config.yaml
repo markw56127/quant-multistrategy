@@ -59,6 +59,7 @@ portfolio:
 backtest:
   initial_capital:    1_000_000
   rebalance_freq:     20        # trading days between rebalances (~monthly)
-  train_window:       504       # ~2 years of history for each LightGBM fit
-  retrain_every_n:    3         # re-fit LightGBM every N rebalances (~quarterly)
+  train_window:       504       # ~2 years of history for each LightGBM/HMM fit
+  retrain_every_n:    3         # re-fit models every N rebalances (~quarterly)
   transaction_cost:   0.001     # 10bps per trade (one-way)
+  hmm_vol_window:     21        # realized vol window for HMM features

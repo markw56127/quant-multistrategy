@@ -62,13 +62,15 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
     )
     targets = forward_idiosyncratic_return(residuals, horizon=sig_cfg["forward_horizon"])
 
-    # 3. Regime model (fit on full history — parameters are stable)
-    logger.info("── Stage 3: Fitting HMM regime model (full history) ──")
+    # 3. Regime model — fit on IS data only for feature panel.
+    #    Trading exposure decisions use a rolling refit inside the engine loop.
+    logger.info("── Stage 3: Fitting HMM regime model (in-sample only) ──")
+    train_end_dt = pd.Timestamp(train_end)
     regime_model = SectorRegimeModel(
         n_states=cfg["regime"]["n_states"],
         n_iter=cfg["regime"]["n_iter"],
     )
-    regime_model.fit(sector_ret, vol_window=cfg["regime"]["vol_window"])
+    regime_model.fit(sector_ret.loc[:train_end_dt], vol_window=cfg["regime"]["vol_window"])
     regime_proba = regime_model.predict_proba(sector_ret, vol_window=cfg["regime"]["vol_window"])
 
     # 4. Fundamentals
@@ -87,7 +89,6 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
     logger.info(f"Feature panel: {features.shape[0]} rows × {features.shape[1]} cols")
 
     # Split data
-    train_end_dt = pd.Timestamp(train_end)
     is_dates = stock_ret.index[stock_ret.index <= train_end_dt]
     oos_dates = stock_ret.index[stock_ret.index > train_end_dt]
 
@@ -148,12 +149,12 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
 
     # 8. Report
     logger.info("─" * 60)
-    logger.info("IN-SAMPLE PERFORMANCE (2015-2023):")
+    logger.info(f"IN-SAMPLE PERFORMANCE (2015-{train_end[:4]}):")
     for k, v in stats_is.items():
         logger.info(f"  {k:30s}: {v:.4f}" if isinstance(v, float) else f"  {k:30s}: {v}")
 
     logger.info("─" * 60)
-    logger.info("OUT-OF-SAMPLE PERFORMANCE (2024):")
+    logger.info(f"OUT-OF-SAMPLE PERFORMANCE ({int(train_end[:4])+1}-2024):")
     for k, v in stats_oos.items():
         logger.info(f"  {k:30s}: {v:.4f}" if isinstance(v, float) else f"  {k:30s}: {v}")
 
@@ -188,4 +189,4 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
 
 if __name__ == "__main__":
     cfg = load_config("config/config.yaml")
-    run_oos_backtest(cfg, train_end="2023-12-31", oos_out="results/backtest_oos.csv")
+    run_oos_backtest(cfg, train_end="2021-12-31", oos_out="results/backtest_oos.csv")
