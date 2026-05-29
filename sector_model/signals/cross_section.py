@@ -202,6 +202,15 @@ class CrossSectionalModel:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.model: Optional[lgb.Booster] = None
+        self._fitted_cols: List[str] = []   # actual columns used at fit time
+
+    def _resolve_cols(self, df: pd.DataFrame) -> List[str]:
+        """Return FEATURE_COLS that are present in df. Warns once on first call."""
+        available = [c for c in FEATURE_COLS if c in df.columns]
+        missing   = [c for c in FEATURE_COLS if c not in df.columns]
+        if missing:
+            logger.debug(f"Features absent from panel (will be skipped): {missing}")
+        return available
 
     def _extract_Xy(
         self,
@@ -210,21 +219,18 @@ class CrossSectionalModel:
         start: pd.Timestamp,
         end:   pd.Timestamp,
     ):
-        """
-        Merge features and targets for dates in [start, end].
-        targets is a (T, N) DataFrame; we stack it to match the feature MultiIndex.
-        """
         feat_window = features.loc[start:end]
-
         tgt_stacked = (
             targets.loc[start:end]
             .stack()
             .rename("target")
         )
         tgt_stacked.index.names = ["date", "ticker"]
-
         merged = feat_window.join(tgt_stacked, how="inner").dropna(subset=["target"])
-        X = merged[FEATURE_COLS].values.astype(np.float32)
+
+        cols = self._resolve_cols(merged)
+        self._fitted_cols = cols
+        X = merged[cols].values.astype(np.float32)
         y = merged["target"].values.astype(np.float32)
         return X, y
 
@@ -254,12 +260,11 @@ class CrossSectionalModel:
         n_rounds = self.cfg.get("n_estimators", 300)
         early    = self.cfg.get("early_stopping_rounds", 50)
 
-        # 10% validation split for early stopping; no shuffling (time-series)
         n_val = max(1, int(len(X) * 0.10))
         X_tr, X_val = X[:-n_val], X[-n_val:]
         y_tr, y_val = y[:-n_val], y[-n_val:]
 
-        dtrain = lgb.Dataset(X_tr, label=y_tr, feature_name=FEATURE_COLS)
+        dtrain = lgb.Dataset(X_tr, label=y_tr, feature_name=self._fitted_cols)
         dval   = lgb.Dataset(X_val, label=y_val, reference=dtrain)
 
         self.model = lgb.train(
@@ -287,15 +292,17 @@ class CrossSectionalModel:
         except KeyError:
             return pd.Series(dtype=float)
 
-        X = day[FEATURE_COLS].values.astype(np.float32)
+        cols = self._fitted_cols or self._resolve_cols(day)
+        X = day[cols].values.astype(np.float32)
         scores = self.model.predict(X)
         return pd.Series(scores, index=day.index, name="alpha_score")
 
     def feature_importance(self) -> pd.Series:
         if self.model is None:
             return pd.Series(dtype=float)
-        imp = self.model.feature_importance(importance_type="gain")
-        return pd.Series(imp, index=FEATURE_COLS).sort_values(ascending=False)
+        imp  = self.model.feature_importance(importance_type="gain")
+        cols = self._fitted_cols or FEATURE_COLS
+        return pd.Series(imp, index=cols).sort_values(ascending=False)
 
 
 class CompositeFactorModel:
