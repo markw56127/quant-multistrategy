@@ -17,7 +17,7 @@ from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from data.universe import load_sector_data
+from data.universe import load_sector_data, fetch_volumes
 from data.fundamentals import fetch_fundamental_features
 from signals.residuals import rolling_ols_decompose, forward_cross_sectional_excess
 from signals.sector import SectorRegimeModel
@@ -73,9 +73,16 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
     regime_model.fit(sector_ret.loc[:train_end_dt], vol_window=cfg["regime"]["vol_window"])
     regime_proba = regime_model.predict_proba(sector_ret, vol_window=cfg["regime"]["vol_window"])
 
-    # 4. Fundamentals
-    logger.info("── Stage 4a: Fetching fundamental features ──")
+    # 4. Supplementary data
     stock_tickers = cfg["data"]["universe"]
+    logger.info("── Stage 4a: Fetching volumes ──")
+    volumes = fetch_volumes(
+        tickers=stock_tickers,
+        start=cfg["data"]["start_date"],
+        end=cfg["data"]["end_date"],
+        cache_dir=cache_dir,
+    )
+    logger.info("── Stage 4b: Fetching fundamental features ──")
     fundamentals = fetch_fundamental_features(
         tickers=stock_tickers,
         prices=prices,
@@ -84,8 +91,11 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
     )
 
     # 5. Features
-    logger.info("── Stage 4b: Building cross-sectional feature panel ──")
-    features = build_features(stock_ret, residuals, betas, regime_proba, sector_ret, fundamentals)
+    logger.info("── Stage 4c: Building cross-sectional feature panel ──")
+    features = build_features(
+        stock_ret, residuals, betas, regime_proba, sector_ret,
+        fundamentals=fundamentals, volumes=volumes,
+    )
     logger.info(f"Feature panel: {features.shape[0]} rows × {features.shape[1]} cols")
 
     # Split data

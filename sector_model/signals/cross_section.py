@@ -24,32 +24,44 @@ import pandas as pd
 from loguru import logger
 
 FEATURE_COLS = [
-    # ── Technical / price-based ──────────────────────────────────────────
-    "idio_mom_1m",    # 21-day lagged idiosyncratic return
-    "idio_mom_3m",    # 63-day
-    "idio_mom_6m",    # 126-day
-    "total_mom_1m",   # 21-day stock return minus sector return
+    # ── Per-stock technical ───────────────────────────────────────────────
+    "idio_mom_1m",        # 21-day idiosyncratic return
+    "idio_mom_3m",        # 63-day
+    "idio_mom_6m",        # 126-day
+    "total_mom_1m",       # 21-day stock return minus sector return
     "total_mom_3m",
-    "reversal_1w",    # 5-day return reversal (mean-reversion signal)
-    "vol_ratio",      # stock realized vol / sector realized vol
-    "beta",           # current rolling OLS beta
-    "regime_0",       # HMM bear probability
-    "regime_1",       # HMM chop probability
-    "regime_2",       # HMM bull probability
-    # ── Cross-sectional price factors ────────────────────────────────────
-    "mom_12_1",       # 12-month return minus last month (Jegadeesh & Titman 1993)
-                      # skips the 1-month reversal while preserving medium-term drift
-    # ── Fundamental (available ~2020+; NaN for earlier dates) ────────────
-    "eps_surprise",        # % EPS surprise vs analyst estimate at most recent earnings
-    "eps_ttm",             # trailing 12-month EPS
-    "eps_growth_yoy",      # TTM EPS growth vs same TTM one year prior
-    "eps_acceleration",    # change in YoY growth rate (is growth speeding up?)
-    "eps_revision",        # analyst EPS estimate change vs prior quarter's estimate
-    "eps_revision_trend",  # rolling 4-quarter sum of revision direction (-4 to +4)
-    "trailing_pe",         # price / TTM EPS
-    "peg_ratio",           # trailing P/E / (EPS growth × 100)
-    "pe_rank_cs",          # cross-sectional percentile rank of P/E within universe
-                           # 0=cheapest, 1=most expensive relative to peers today
+    "reversal_1w",        # 5-day return reversal
+    "vol_ratio",          # stock realized vol / sector realized vol
+    "beta",               # rolling OLS beta to sector
+    "mom_12_1",           # 12-month return minus last month (Jegadeesh & Titman 1993)
+    # ── HMM regime probabilities ─────────────────────────────────────────
+    "regime_0",           # bear probability
+    "regime_1",           # chop probability
+    "regime_2",           # bull probability
+    # ── Cross-sectional market context (same value for all stocks each day) ─
+    "cs_dispersion",      # rolling 21d avg of cross-sectional return std.
+                          # High = stocks diverging = more alpha opportunity.
+    "breadth_200d",       # fraction of universe above 200d cumulative return.
+                          # Low breadth + high index = narrow/fragile rally.
+    "sector_vol_pctile",  # current 21d sector vol as percentile of trailing 252d.
+                          # Lets model distinguish calm bull (low pctile) from
+                          # crisis vol spike (high pctile) — Item 6 proxy without
+                          # splitting into separate models.
+    # ── Volume signals (per-stock) ────────────────────────────────────────
+    "rel_volume",         # 5d avg volume / 63d avg volume. Rising volume = attention.
+    "price_vol_corr",     # 21d correlation between daily return and log-vol change.
+                          # Positive = price moves confirmed by volume (accumulation).
+                          # Negative = price moves on declining volume (weak signal).
+    # ── Fundamentals (available ~2020+) ──────────────────────────────────
+    "eps_surprise",
+    "eps_ttm",
+    "eps_growth_yoy",
+    "eps_acceleration",
+    "eps_revision",
+    "eps_revision_trend",
+    "trailing_pe",
+    "peg_ratio",
+    "pe_rank_cs",
 ]
 
 
@@ -60,21 +72,23 @@ def build_features(
     regime_proba:    pd.DataFrame,
     sector_returns:  pd.Series,
     fundamentals:    Optional[pd.DataFrame] = None,
+    volumes:         Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Build a long-format panel with (date, ticker) MultiIndex.
-
-    All features are lagged by at least 1 day so there is no forward-looking
-    bias when the DataFrame is sliced at any rebalance date.
-
-    Args:
-        fundamentals : optional (date, ticker) MultiIndex DataFrame from
-                       data.fundamentals.fetch_fundamental_features.
-                       Joined on matching (date, ticker) pairs; NaN where
-                       earnings history is unavailable.
+    All features lagged ≥1 day — no forward-looking bias.
     """
-    sector_vol = sector_returns.rolling(21).std()
-    stock_vol  = stock_returns.rolling(21).std()
+    sector_vol  = sector_returns.rolling(21).std()
+    stock_vol   = stock_returns.rolling(21).std()
+
+    # ── Cross-sectional market context (broadcast to all tickers) ────────
+    # cs_dispersion: when stocks are diverging, alpha is more available
+    cs_disp = stock_returns.std(axis=1).rolling(21).mean().shift(1)
+    # breadth_200d: fraction of universe above 200d cumulative return level
+    breadth = (stock_returns.rolling(200).sum() > 0).mean(axis=1).shift(1)
+    # sector_vol_pctile: is current vol historically high or low?
+    # Proxies the vol-regime split (Item 6) without needing two separate models
+    s_vol_pctile = sector_vol.rolling(252, min_periods=63).rank(pct=True).shift(1)
 
     records: List[pd.DataFrame] = []
     for ticker in residuals.columns:
@@ -83,24 +97,43 @@ def build_features(
         b   = betas[ticker]
 
         df = pd.DataFrame(index=r.index)
-        df["idio_mom_1m"]  = r.rolling(21).sum().shift(1)
-        df["idio_mom_3m"]  = r.rolling(63).sum().shift(1)
-        df["idio_mom_6m"]  = r.rolling(126).sum().shift(1)
+
+        # Per-stock technical
+        df["idio_mom_1m"] = r.rolling(21).sum().shift(1)
+        df["idio_mom_3m"] = r.rolling(63).sum().shift(1)
+        df["idio_mom_6m"] = r.rolling(126).sum().shift(1)
 
         if ret is not None:
             df["total_mom_1m"] = (ret - sector_returns).rolling(21).sum().shift(1)
             df["total_mom_3m"] = (ret - sector_returns).rolling(63).sum().shift(1)
             df["reversal_1w"]  = ret.rolling(5).sum().shift(1)
             df["vol_ratio"]    = (stock_vol[ticker] / (sector_vol + 1e-8)).shift(1)
-            # 12-1 momentum: 12-month cumulative return skipping last month.
-            # The skip removes the short-term reversal while preserving the
-            # medium-term trend documented by Jegadeesh & Titman (1993).
-            df["mom_12_1"] = (ret.rolling(252).sum() - ret.rolling(21).sum()).shift(1)
+            df["mom_12_1"]     = (ret.rolling(252).sum() - ret.rolling(21).sum()).shift(1)
         else:
-            df[["total_mom_1m", "total_mom_3m", "reversal_1w", "vol_ratio", "mom_12_1"]] = np.nan
+            df[["total_mom_1m", "total_mom_3m", "reversal_1w",
+                "vol_ratio", "mom_12_1"]] = np.nan
 
         df["beta"] = b.shift(1)
         df = df.join(regime_proba.shift(1))
+
+        # Cross-sectional market context (same for all tickers each day)
+        df["cs_dispersion"]    = cs_disp
+        df["breadth_200d"]     = breadth
+        df["sector_vol_pctile"] = s_vol_pctile
+
+        # Volume signals
+        if volumes is not None and ticker in volumes.columns:
+            vol_s = volumes[ticker].reindex(r.index).ffill()
+            vol_s = vol_s.clip(lower=1)
+            df["rel_volume"] = (
+                vol_s.rolling(5).mean() / (vol_s.rolling(63).mean() + 1e-6)
+            ).shift(1)
+            log_dvol = np.log(vol_s).diff()
+            df["price_vol_corr"] = ret.rolling(21).corr(log_dvol).shift(1) \
+                                   if ret is not None else np.nan
+        else:
+            df[["rel_volume", "price_vol_corr"]] = np.nan
+
         df["ticker"] = ticker
         records.append(df)
 
@@ -110,13 +143,12 @@ def build_features(
     )
     panel = panel.drop(columns=["ticker"])
 
+    # Fundamental features
     if fundamentals is not None:
         fund_cols = [c for c in fundamentals.columns if c in FEATURE_COLS]
         panel = panel.join(fundamentals[fund_cols], how="left")
 
-    # Cross-sectional P/E rank: computed across all tickers at each date.
-    # Ranks the trailing_pe within the universe so the model sees relative
-    # valuation (cheap vs expensive vs peers) not just absolute P/E level.
+    # Cross-sectional P/E rank (computed across all tickers at each date)
     if "trailing_pe" in panel.columns:
         panel["pe_rank_cs"] = (
             panel["trailing_pe"]

@@ -54,6 +54,46 @@ def fetch_prices(
     return prices
 
 
+def fetch_volumes(
+    tickers: List[str],
+    start: str,
+    end: str,
+    cache_dir: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Fetch daily trading volumes for stock tickers. Cached separately from prices.
+    Columns aligned to the same tickers/dates as fetch_prices.
+    """
+    if cache_dir:
+        cache_path = Path(cache_dir) / f"volumes_{start}_{end}.parquet"
+        if cache_path.exists():
+            logger.info(f"Loading cached volumes from {cache_path}")
+            return pd.read_parquet(cache_path)
+
+    logger.info(f"Fetching volumes for {len(tickers)} tickers [{start} → {end}]")
+    raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
+
+    if isinstance(raw.columns, pd.MultiIndex):
+        volumes = raw["Volume"]
+    else:
+        volumes = raw[["Volume"]].rename(columns={"Volume": tickers[0]}) \
+                  if "Volume" in raw.columns else pd.DataFrame(index=raw.index)
+
+    volumes = volumes.ffill(limit=5)
+    missing_frac = volumes.isna().mean()
+    drop = missing_frac[missing_frac > 0.20].index.tolist()
+    if drop:
+        volumes = volumes.drop(columns=drop)
+    volumes = volumes.fillna(0)
+
+    if cache_dir:
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        volumes.to_parquet(cache_path)
+        logger.info(f"Cached volumes to {cache_path}")
+
+    return volumes
+
+
 def load_sector_data(
     cfg: dict,
     cache_dir: Optional[str] = None,
