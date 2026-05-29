@@ -278,7 +278,7 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
         # Normalise so total gross = sector-weighted exposure
         total = sum(new_weights.values())
         if total > 0:
-            new_weights = {k: v / total * sum(sector_weights.values())
+            new_weights = {k: v / total * float(sector_weights.sum())
                            for k, v in new_weights.items()}
 
         # ── Portfolio P&L ─────────────────────────────────────────────────
