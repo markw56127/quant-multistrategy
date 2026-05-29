@@ -64,8 +64,13 @@ class SectorBacktest:
         dates   = self.stock_returns.index
         vol_21d = self.residuals.rolling(21).std()
 
-        # Sector realised vol (annualised) — drives exposure via vol targeting
-        sector_vol_daily = self.sector_returns.rolling(21).std() * np.sqrt(252)
+        # Downside semideviation (annualised): clip positive returns to zero before
+        # computing rolling std.  Only days where the sector falls contribute, so
+        # exposure scales back up faster during V-shaped recoveries than with total vol.
+        # The √2 factor normalises so that for a symmetric distribution this equals
+        # total vol, keeping the target_vol=0.15 calibration consistent.
+        downside_ret     = self.sector_returns.clip(upper=0)
+        sector_vol_daily = downside_ret.rolling(21).std() * np.sqrt(252) * np.sqrt(2)
 
         # HMM state series for diagnostics (precomputed, no look-ahead concern
         # since it's only used as a feature in LightGBM, not for trading decisions)

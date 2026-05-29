@@ -63,12 +63,27 @@ def rolling_ols_decompose(
 
 
 def forward_idiosyncratic_return(residuals: pd.DataFrame, horizon: int = 20) -> pd.DataFrame:
-    """
-    Sum of idiosyncratic returns over the next `horizon` days.
-    This is the supervised learning target: predict this at time t using
-    features known at time t.
-
-    The shift(-horizon) aligns each row with the observation date, not the
-    target date — so features at row t predict the return from t to t+horizon.
-    """
+    """Sum of OLS idiosyncratic returns over the next `horizon` days."""
     return residuals.rolling(horizon).sum().shift(-horizon)
+
+
+def forward_cross_sectional_excess(
+    stock_returns: pd.DataFrame, horizon: int = 40
+) -> pd.DataFrame:
+    """
+    Forward cross-sectional excess return: each stock's horizon-day forward
+    return minus the equal-weight universe average over the same window.
+
+    This is a cleaner prediction target than OLS residuals because it:
+      1. Eliminates beta estimation error (no noisy 60-day OLS required)
+      2. Directly measures what the portfolio objective needs: rank ordering
+         of stocks within the universe
+      3. Is zero-mean by construction at each date, making LightGBM's
+         regression task well-posed
+
+    The model learns "which stocks beat the average?" rather than "what is
+    the absolute level of idiosyncratic return?" — a more tractable problem.
+    """
+    fwd     = stock_returns.rolling(horizon).sum().shift(-horizon)
+    cs_mean = fwd.mean(axis=1)
+    return fwd.subtract(cs_mean, axis=0)

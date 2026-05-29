@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from data.universe import load_sector_data
 from data.fundamentals import fetch_fundamental_features
-from signals.residuals import rolling_ols_decompose, forward_idiosyncratic_return
+from signals.residuals import rolling_ols_decompose, forward_cross_sectional_excess
 from signals.sector import SectorRegimeModel
 from signals.cross_section import CrossSectionalModel, build_features
 from backtest.engine import SectorBacktest
@@ -60,7 +60,7 @@ def run_oos_backtest(cfg: dict, train_end: str = "2023-12-31", oos_out: str = "r
         window=sig_cfg["ols_window"],
         min_periods=sig_cfg["ols_min_periods"],
     )
-    targets = forward_idiosyncratic_return(residuals, horizon=sig_cfg["forward_horizon"])
+    targets = forward_cross_sectional_excess(stock_ret, horizon=sig_cfg["forward_horizon"])
 
     # 3. Regime model — fit on IS data only for feature panel.
     #    Trading exposure decisions use a rolling refit inside the engine loop.
