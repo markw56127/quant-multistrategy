@@ -1,0 +1,116 @@
+data:
+  universe:
+    # ── Mega-cap platform ─────────────────────────────────────────────────
+    - AAPL
+    - MSFT
+    - NVDA
+    - AVGO      # Broadcom (AVGO is the correct ticker, not BROADCOM)
+    # ── Semiconductors ───────────────────────────────────────────────────
+    - AMD
+    - QCOM
+    - AMAT
+    - LRCX
+    - MU
+    - KLAC
+    - TXN
+    - ADI
+    - NXPI
+    - MCHP
+    - "ON"
+    - MRVL
+    - MPWR
+    - SWKS
+    - INTC
+    - SNPS
+    - CDNS
+    - TER
+    - ENTG
+    - ACLS
+    - ONTO
+    # ── Enterprise software & SaaS ────────────────────────────────────────
+    - ORCL
+    - CRM
+    - ADBE
+    - INTU
+    - NOW       # ServiceNow (IPO 2012)
+    - WDAY      # Workday (IPO 2012)
+    - ANSS
+    - PAYC      # Paycom (IPO 2014)
+    # ── Cybersecurity ────────────────────────────────────────────────────
+    - PANW      # Palo Alto Networks — PANW is correct, not PALO
+    - FTNT
+    # ── IT services & consulting ──────────────────────────────────────────
+    - ACN
+    - IBM
+    - CTSH
+    - EPAM
+    - LDOS
+    - SAIC      # (IPO 2013)
+    # ── Networking & infrastructure ───────────────────────────────────────
+    - CSCO
+    - JNPR
+    - ANET      # Arista (IPO 2014)
+    - FFIV
+    - AKAM
+    # ── Storage & data ────────────────────────────────────────────────────
+    - NTAP
+    - STX
+    - WDC
+    - HPQ
+    - HPE       # (spun off Nov 2015 — ~8% missing, passes 20% filter)
+    # ── Hardware & components ────────────────────────────────────────────
+    - GLW       # Corning
+    - TEL       # TE Connectivity
+    - APH       # Amphenol
+    - MSI       # Motorola Solutions
+    - ZBRA      # Zebra Technologies
+    - KEYS      # Keysight (IPO Nov 2014)
+    - TRMB      # Trimble
+    # ── IT research & services ────────────────────────────────────────────
+    - IT        # Gartner
+    - ROP       # Roper Technologies
+    - CDW       # CDW Corp (IPO 2013)
+    - MANH      # Manhattan Associates
+    - VRSN
+    # ── Software / other ─────────────────────────────────────────────────
+    - LOGI      # Logitech
+    - ADSK      # Autodesk
+  sector_etf: "VGT"
+  start_date: "2015-01-01"
+  end_date:   "2024-12-31"
+  cache_dir:  "cache/vgt_expanded"
+
+signals:
+  ols_window:       60
+  ols_min_periods:  30
+  forward_horizon:  40
+  vol_window:       21
+
+regime:
+  n_states:    3
+  n_iter:      300
+  vol_window:  21
+
+alpha_model:
+  n_estimators:         200
+  num_leaves:           15
+  learning_rate:        0.05
+  feature_fraction:     0.7
+  bagging_fraction:     0.8
+  bagging_freq:         5
+  min_child_samples:    30
+  early_stopping_rounds: 40
+
+portfolio:
+  n_long:            10     # more stocks → slightly more positions
+  max_position_size: 0.15   # tighter cap since universe is larger
+  target_vol:        0.15
+  min_exposure:      0.50
+  max_exposure:      1.00
+
+backtest:
+  initial_capital:    1_000_000
+  rebalance_freq:     20
+  train_window:       504
+  retrain_every_n:    3
+  transaction_cost:   0.001

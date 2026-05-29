@@ -3,11 +3,11 @@ Run the backtest across all configured sectors and print a comparison table.
 
 Usage (from sector_model/ directory):
     python compare_sectors.py
-    python compare_sectors.py --sectors semis it_software
-    python compare_sectors.py --train-end 2021-12-31  # OOS split
+    python compare_sectors.py --sectors semis financials vgt_expanded
 
-Each sector runs independently with its own data cache, so runs can be
-parallelised manually by opening separate terminals.
+Each sector runs independently with its own data cache. Results are written to
+results/<config_key>/ so configs with the same ETF don't overwrite each other.
+Both LightGBM and composite model results are shown side-by-side.
 """
 
 import argparse
@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import yaml
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -28,67 +27,75 @@ SECTOR_CONFIGS = {
     "it_software":  "config/sectors/it_software.yaml",
     "financials":   "config/sectors/financials.yaml",
     "industrials":  "config/sectors/industrials.yaml",
+    "vgt_expanded": "config/sectors/vgt_expanded.yaml",
 }
 
-# Metrics to show in the comparison table, in order
 DISPLAY_METRICS = [
     "total_return",
     "benchmark_total_return",
     "excess_return",
-    "annualized_return",
     "annualized_sharpe",
     "information_ratio",
     "max_drawdown",
     "mean_ic",
     "ic_hit_rate",
     "avg_gross_exposure",
-    "total_cost",
 ]
 
 
-def run_sector(name: str, config_path: str) -> dict:
+def run_sector(name: str, config_path: str):
     logger.info(f"\n{'═'*60}")
-    logger.info(f"Running sector: {name.upper()} ({config_path})")
+    logger.info(f"Running: {name.upper()} ({config_path})")
     logger.info(f"{'═'*60}")
 
     cfg      = load_config(config_path)
-    sector   = cfg["data"].get("sector_etf", name).lower()
-    out_path = f"results/{sector}/backtest.csv"
+    out_path = f"results/{name}/backtest.csv"   # use config key, not sector_etf
 
     try:
         results = run(cfg, out_path=out_path)
         rebal_freq = cfg["backtest"]["rebalance_freq"]
-        stats = SectorBacktest.performance_stats(results, periods_per_year=252 / rebal_freq)
-        stats["sector"] = name
-        return stats
+        ppy        = 252 / rebal_freq
+        lgbm_stats = SectorBacktest.performance_stats(results, periods_per_year=ppy)
+
+        # Load composite results if they were written alongside
+        comp_path = out_path.replace(".csv", "_composite.csv")
+        comp_stats = {}
+        if Path(comp_path).exists():
+            comp_df    = pd.read_csv(comp_path, index_col=0, parse_dates=True)
+            comp_stats = SectorBacktest.performance_stats(comp_df, periods_per_year=ppy)
+
+        return {"sector": name, "lgbm": lgbm_stats, "composite": comp_stats}
     except Exception as e:
         logger.error(f"{name}: FAILED — {e}")
-        return {"sector": name}
+        return {"sector": name, "lgbm": {}, "composite": {}}
 
 
-def print_comparison(all_stats: list[dict]) -> None:
-    if not all_stats:
+def print_comparison(all_results: list[dict]) -> None:
+    if not all_results:
         return
 
     rows = []
-    for s in all_stats:
-        row = {"sector": s.get("sector", "?")}
-        for m in DISPLAY_METRICS:
-            val = s.get(m, float("nan"))
-            if isinstance(val, float):
-                row[m] = f"{val:+.3f}" if "return" in m or "drawdown" in m or "ratio" in m or "ic" in m \
-                         else f"{val:.3f}"
-            else:
-                row[m] = str(val)
-        rows.append(row)
+    for r in all_results:
+        name = r["sector"]
+        for model_label, stats in [("lgbm", r["lgbm"]), ("composite", r["composite"])]:
+            if not stats:
+                continue
+            row = {"sector": f"{name} [{model_label}]"}
+            for m in DISPLAY_METRICS:
+                val = stats.get(m, float("nan"))
+                if isinstance(val, float):
+                    row[m] = f"{val:+.3f}" if any(k in m for k in ("return", "drawdown", "ratio", "ic")) \
+                             else f"{val:.3f}"
+                else:
+                    row[m] = str(val)
+            rows.append(row)
 
     df = pd.DataFrame(rows).set_index("sector")
-
-    print("\n" + "═" * 80)
-    print("SECTOR COMPARISON")
-    print("═" * 80)
+    print("\n" + "═" * 100)
+    print("SECTOR × MODEL COMPARISON")
+    print("═" * 100)
     print(df.to_string())
-    print("═" * 80 + "\n")
+    print("═" * 100 + "\n")
 
 
 if __name__ == "__main__":
@@ -101,13 +108,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    all_stats = []
+    all_results = []
     for name in args.sectors:
         config_path = SECTOR_CONFIGS[name]
         if not Path(config_path).exists():
             logger.warning(f"Config not found: {config_path} — skipping {name}")
             continue
-        stats = run_sector(name, config_path)
-        all_stats.append(stats)
+        all_results.append(run_sector(name, config_path))
 
-    print_comparison(all_stats)
+    print_comparison(all_results)

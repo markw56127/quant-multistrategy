@@ -32,7 +32,7 @@ from data.universe import load_sector_data, fetch_volumes
 from data.fundamentals import fetch_fundamental_features
 from signals.residuals import rolling_ols_decompose, forward_cross_sectional_excess
 from signals.sector import SectorRegimeModel
-from signals.cross_section import CrossSectionalModel, build_features
+from signals.cross_section import CrossSectionalModel, CompositeFactorModel, build_features
 from backtest.engine import SectorBacktest
 
 
@@ -99,6 +99,7 @@ def run(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
     # 5. Walk-forward backtest
     logger.info("── Stage 5: Walk-forward backtest ──")
     alpha_model = CrossSectionalModel(cfg["alpha_model"])
+    composite_model = CompositeFactorModel(cfg.get("alpha_model", {}))  # Use same config for consistency
 
     bt_cfg = dict(cfg["backtest"])
     bt_cfg["portfolio"] = cfg["portfolio"]
@@ -113,27 +114,71 @@ def run(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
         regime_model=regime_model,
         alpha_model=alpha_model,
         cfg=bt_cfg,
+        second_model=composite_model,
+        second_model_name="composite_factors",
     )
-    results = bt.run()
+    backtest_result = bt.run()
+    
+    # Handle both single and dual model results
+    if isinstance(backtest_result, tuple):
+        results, composite_results = backtest_result
+        has_composite = True
+    else:
+        results = backtest_result
+        composite_results = None
+        has_composite = False
 
     # 6. Report
     rebal_freq = cfg["backtest"]["rebalance_freq"]
     stats = SectorBacktest.performance_stats(results, periods_per_year=252 / rebal_freq)
 
-    logger.info("─" * 50)
-    logger.info("Performance summary:")
+    logger.info("─" * 60)
+    logger.info("LIGHTGBM MODEL PERFORMANCE:")
     for k, v in stats.items():
         logger.info(f"  {k:30s}: {v:.4f}" if isinstance(v, float) else f"  {k:30s}: {v}")
-    logger.info("─" * 50)
+    
+    if has_composite:
+        composite_stats = SectorBacktest.performance_stats(composite_results, periods_per_year=252 / rebal_freq)
+        logger.info("─" * 60)
+        logger.info("COMPOSITE FACTORS MODEL PERFORMANCE:")
+        for k, v in composite_stats.items():
+            logger.info(f"  {k:30s}: {v:.4f}" if isinstance(v, float) else f"  {k:30s}: {v}")
+        
+        logger.info("─" * 60)
+        logger.info("MODEL COMPARISON:")
+        lgbm_excess = stats.get('excess_return', float('nan'))
+        comp_excess = composite_stats.get('excess_return', float('nan'))
+        lgbm_sharpe = stats.get('annualized_sharpe', float('nan'))
+        comp_sharpe = composite_stats.get('annualized_sharpe', float('nan'))
+        lgbm_ir = stats.get('information_ratio', float('nan'))
+        comp_ir = composite_stats.get('information_ratio', float('nan'))
+        lgbm_ic = stats.get('mean_ic', float('nan'))
+        comp_ic = composite_stats.get('mean_ic', float('nan'))
+        
+        logger.info(f"  LightGBM excess return:      {lgbm_excess:.4f}")
+        logger.info(f"  Composite excess return:     {comp_excess:.4f}")
+        logger.info(f"  LightGBM Sharpe:             {lgbm_sharpe:.4f}")
+        logger.info(f"  Composite Sharpe:            {comp_sharpe:.4f}")
+        logger.info(f"  LightGBM Information Ratio:  {lgbm_ir:.4f}")
+        logger.info(f"  Composite Information Ratio: {comp_ir:.4f}")
+        logger.info(f"  LightGBM mean IC:            {lgbm_ic:.4f}")
+        logger.info(f"  Composite mean IC:           {comp_ic:.4f}")
+    
+    logger.info("─" * 60)
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     results.to_csv(out_path)
-    logger.info(f"Results saved to {out_path}")
+    logger.info(f"LightGBM results saved to {out_path}")
+
+    if has_composite:
+        composite_out_path = out_path.replace(".csv", "_composite.csv")
+        composite_results.to_csv(composite_out_path)
+        logger.info(f"Composite results saved to {composite_out_path}")
 
     # Save feature importance from final LightGBM fit
     if alpha_model.model is not None:
         imp = alpha_model.feature_importance()
-        logger.info(f"Feature importance:\n{imp.to_string()}")
+        logger.info(f"LightGBM Feature importance:\n{imp.to_string()}")
 
     return results
 

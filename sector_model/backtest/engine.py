@@ -13,7 +13,7 @@ Exposure management:
   longer drives binary exposure decisions.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -36,6 +36,8 @@ class SectorBacktest:
         regime_model:   SectorRegimeModel,
         alpha_model:    CrossSectionalModel,
         cfg:            dict,
+        second_model:   Optional[CrossSectionalModel] = None,
+        second_model_name: str = "composite",
     ):
         self.stock_returns  = stock_returns
         self.residuals      = residuals
@@ -45,9 +47,15 @@ class SectorBacktest:
         self.betas          = betas
         self.regime_model   = regime_model
         self.alpha_model    = alpha_model
+        self.second_model   = second_model
+        self.second_model_name = second_model_name
         self.cfg            = cfg
 
-    def run(self) -> pd.DataFrame:
+    def run(self) -> pd.DataFrame | Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Run backtest with primary model. If second_model is set, returns tuple of
+        (primary_results, secondary_results).
+        """
         rebal_freq      = self.cfg.get("rebalance_freq",   20)
         train_window    = self.cfg.get("train_window",    504)
         retrain_every   = self.cfg.get("retrain_every_n",   3)
@@ -81,8 +89,10 @@ class SectorBacktest:
         rebal_dates = dates[start_idx::rebal_freq]
 
         capital         = float(initial_capital)
+        second_capital  = float(initial_capital)
         current_weights = pd.Series(0.0, index=self.stock_returns.columns)
         records: List[Dict] = []
+        second_records: List[Dict] = [] if self.second_model else None
         last_fit_rebal  = -retrain_every
 
         for rebal_num, rebal_date in enumerate(rebal_dates):
@@ -95,13 +105,17 @@ class SectorBacktest:
                 self.alpha_model.fit(
                     self.features, self.targets, train_start, train_end
                 )
+                if self.second_model:
+                    self.second_model.fit(
+                        self.features, self.targets, train_start, train_end
+                    )
                 last_fit_rebal = rebal_num
 
             # Current sector vol for exposure scaling
             sector_vol_ann = float(sector_vol_daily.loc[rebal_date]) \
                              if rebal_date in sector_vol_daily.index else target_vol
 
-            # Predict alpha scores
+            # Predict alpha scores from primary model
             try:
                 scores = self.alpha_model.predict(self.features, rebal_date)
             except Exception as e:
@@ -116,15 +130,42 @@ class SectorBacktest:
                 n_long, max_pos, target_vol, min_exposure, max_exposure,
             ).reindex(self.stock_returns.columns).fillna(0.0)
 
-            # Transaction cost on turnover
+            # If second model is available, also run it
+            if self.second_model:
+                try:
+                    second_scores = self.second_model.predict(self.features, rebal_date)
+                except Exception as e:
+                    logger.warning(f"{rebal_date}: second model prediction failed ({e})")
+                    second_scores = pd.Series(0.0, index=self.stock_returns.columns)
+                
+                second_scores = second_scores.reindex(self.stock_returns.columns).fillna(0.0)
+                second_weights = construct_weights(
+                    second_scores, stock_vol_now, sector_vol_ann,
+                    n_long, max_pos, target_vol, min_exposure, max_exposure,
+                ).reindex(self.stock_returns.columns).fillna(0.0)
+            else:
+                second_weights = None
+
+            # Transaction cost on turnover (use primary model weights)
             turnover = (new_weights - current_weights).abs().sum()
             capital *= (1.0 - turnover * trans_cost)
+
+            # If second model exists, also deduct transaction costs
+            if self.second_model:
+                second_capital *= (1.0 - turnover * trans_cost)
 
             # Hold for rebal_freq days
             end_idx    = min(date_idx + rebal_freq, len(dates) - 1)
             hold_slice = self.stock_returns.iloc[date_idx:end_idx]
             period_ret = float((hold_slice * new_weights).sum(axis=1).sum())
             capital   *= (1.0 + period_ret)
+
+            # If second model exists, also compute its returns
+            if self.second_model and second_weights is not None:
+                second_period_ret = float((hold_slice * second_weights).sum(axis=1).sum())
+                second_capital *= (1.0 + second_period_ret)
+            else:
+                second_period_ret = None
 
             # Benchmark: sector ETF return over same hold period
             bench_ret = float(self.sector_returns.iloc[date_idx:end_idx].sum())
@@ -134,8 +175,20 @@ class SectorBacktest:
             ic = float(scores.reindex(realized.index).corr(realized, method="spearman")) \
                  if len(realized) else float("nan")
 
+            if self.second_model:
+                second_ic = float(second_scores.reindex(realized.index).corr(realized, method="spearman")) \
+                     if len(realized) else float("nan")
+            else:
+                second_ic = None
+
             long_mask = new_weights > 0
             long_ret  = float((hold_slice * new_weights.where(long_mask, 0)).sum(axis=1).sum())
+
+            if self.second_model and second_weights is not None:
+                second_long_mask = second_weights > 0
+                second_long_ret = float((hold_slice * second_weights.where(second_long_mask, 0)).sum(axis=1).sum())
+            else:
+                second_long_ret = None
 
             bull_prob = float(bull_prob_all.loc[rebal_date]) \
                         if rebal_date in bull_prob_all.index else float("nan")
@@ -155,13 +208,41 @@ class SectorBacktest:
                 "gross_exposure":    float(new_weights.abs().sum()),
                 "n_long":            int((new_weights > 0).sum()),
             })
+
+            if self.second_model and second_records is not None:
+                second_records.append({
+                    "date":              rebal_date,
+                    "capital":           second_capital,
+                    "period_return":     second_period_ret,
+                    "benchmark_return":  bench_ret,
+                    "long_return":       second_long_ret,
+                    "short_return":      0.0,
+                    "ic":                second_ic,
+                    "sector_vol_ann":    sector_vol_ann,
+                    "bull_prob":         bull_prob,
+                    "turnover":          float(turnover),  # Use same turnover estimate as primary
+                    "cost":              float(turnover * trans_cost),
+                    "gross_exposure":    float(second_weights.abs().sum()),
+                    "n_long":            int((second_weights > 0).sum()),
+                })
+
             current_weights = new_weights
 
         results = pd.DataFrame(records).set_index("date")
         total_ret = capital / initial_capital - 1
         logger.info(
-            f"Backtest complete | ${capital:,.0f} | total return: {total_ret*100:.1f}%"
+            f"Primary model backtest complete | ${capital:,.0f} | total return: {total_ret*100:.1f}%"
         )
+
+        if self.second_model and second_records:
+            second_results = pd.DataFrame(second_records).set_index("date")
+            second_capital = second_results["capital"].iloc[-1]
+            second_total_ret = second_capital / initial_capital - 1
+            logger.info(
+                f"Secondary model ({self.second_model_name}) backtest complete | ${second_capital:,.0f} | total return: {second_total_ret*100:.1f}%"
+            )
+            return results, second_results
+        
         return results
 
     @staticmethod

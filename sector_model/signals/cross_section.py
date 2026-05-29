@@ -259,3 +259,76 @@ class CrossSectionalModel:
             return pd.Series(dtype=float)
         imp = self.model.feature_importance(importance_type="gain")
         return pd.Series(imp, index=FEATURE_COLS).sort_values(ascending=False)
+
+
+class CompositeFactorModel:
+    """
+    Simple weighted composite of cross-sectional z-scored factors.
+
+    Why this outperforms LightGBM on small universes:
+      LightGBM with 200 trees and 15 leaves has thousands of degrees of
+      freedom. On a 25-70 stock cross-section it memorises noise that doesn't
+      generalise. This model has exactly k parameters (the factor weights) and
+      can't overfit because there's nothing to fit — weights are fixed from the
+      academic literature, not estimated from the data.
+
+      The tradeoff: it can't learn non-linear interactions or adapt to regime
+      changes. But for small-N cross-sections the bias-variance tradeoff strongly
+      favours the simpler model.
+
+    Default factor weights (configurable via composite_weights in config):
+      mom_12_1          0.35  — Jegadeesh & Titman (1993) momentum
+      eps_revision_trend 0.35  — persistent analyst upgrades (Stickel 1991)
+      pe_rank_cs_neg    0.30  — relative value (cheap vs peers; Fama-French 1992)
+
+    Factors with NaN values (e.g. fundamentals before 2020) are skipped for that
+    date and the remaining weights are renormalised automatically.
+    """
+
+    _DEFAULT_WEIGHTS = {
+        "mom_12_1":           0.35,
+        "eps_revision_trend": 0.35,
+        "pe_rank_cs_neg":     0.30,  # special key: uses -pe_rank_cs
+    }
+
+    def __init__(self, cfg: dict):
+        self.cfg = cfg
+        w = cfg.get("composite_weights", {})
+        self.weights: Dict[str, float] = w if w else dict(self._DEFAULT_WEIGHTS)
+        self.model = True   # sentinel: always "fitted", enables feature_importance logging
+
+    def fit(self, *args, **kwargs) -> None:
+        """No-op: weights are fixed, not estimated."""
+        pass
+
+    def predict(self, features: pd.DataFrame, date: pd.Timestamp) -> pd.Series:
+        """Cross-sectional composite score for each stock. Higher = stronger long."""
+        try:
+            day = features.xs(date, level="date")
+        except KeyError:
+            return pd.Series(dtype=float)
+
+        composite   = pd.Series(0.0, index=day.index)
+        total_w     = 0.0
+
+        for factor_name, weight in self.weights.items():
+            col  = "pe_rank_cs" if factor_name == "pe_rank_cs_neg" else factor_name
+            sign = -1.0         if factor_name == "pe_rank_cs_neg" else 1.0
+
+            if col not in day.columns:
+                continue
+            vals = day[col].dropna()
+            if len(vals) < 3 or vals.std() < 1e-8:
+                continue
+
+            z = sign * (vals - vals.mean()) / vals.std()
+            composite = composite.add(weight * z, fill_value=0.0)
+            total_w  += weight
+
+        if total_w > 0:
+            composite /= total_w   # renormalise when some factors are NaN
+
+        return composite.rename("alpha_score")
+
+    def feature_importance(self) -> pd.Series:
+        return pd.Series(self.weights).sort_values(ascending=False)
