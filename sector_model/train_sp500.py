@@ -127,11 +127,19 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     logger.info("═══ Stage 3: Fetching sector ETF prices ═══")
     import yfinance as yf
     etf_tickers = [SECTOR_ETFS[s] for s in ACTIVE_SECTORS]
+    logger.info(f"Downloading ETF tickers: {etf_tickers}")
     raw = yf.download(etf_tickers, start=start_date, end=end_date,
                       auto_adjust=True, progress=False)
+    logger.info(f"Raw download shape: {raw.shape}, columns: {raw.columns.tolist()[:5]}")
     etf_prices = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+    logger.info(f"After extracting Close: shape {etf_prices.shape}, dtypes: {etf_prices.dtypes.unique()}")
     # Drop columns that are entirely NaN, then ffill gaps, then drop rows with any remaining NaN
-    etf_prices = etf_prices.dropna(axis=1, how="all").ffill(limit=5).dropna()
+    etf_prices = etf_prices.dropna(axis=1, how="all")
+    logger.info(f"After dropna(axis=1, how='all'): shape {etf_prices.shape}")
+    etf_prices = etf_prices.ffill(limit=5)
+    logger.info(f"After ffill: shape {etf_prices.shape}")
+    etf_prices = etf_prices.dropna()
+    logger.info(f"After dropna(): shape {etf_prices.shape}")
     if etf_prices.empty:
         raise RuntimeError("No sector ETF data available for backtest period")
     logger.info(f"Sector ETF prices: {len(etf_prices)} trading days, {etf_prices.shape[1]} sectors")
