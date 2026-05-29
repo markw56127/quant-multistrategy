@@ -63,7 +63,7 @@ def construct_weights(
     longs  = ranked[ranked <= n_long].index
 
     if len(longs) == 0:
-        logger.debug("No valid scores — holding cash")
+        # logger.debug("No valid scores — holding cash")
         return pd.Series(0.0, index=scores.index)
 
     v     = stock_vol.reindex(longs).fillna(stock_vol.mean())
@@ -82,8 +82,8 @@ def construct_weights(
     if weights.sum() > 0:
         weights = weights / weights.sum() * gross_target
 
-    logger.debug(
-        f"Portfolio: longs={longs.tolist()} | downvol={sector_vol_ann:.1%} "
-        f"| gross={weights.sum():.2f} | cash={1 - weights.sum():.2f}"
-    )
+    # logger.debug(
+    #     f"Portfolio: longs={longs.tolist()} | downvol={sector_vol_ann:.1%} "
+    #     f"| gross={weights.sum():.2f} | cash={1 - weights.sum():.2f}"
+    # )
     return weights

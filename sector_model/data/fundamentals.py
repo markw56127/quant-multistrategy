@@ -195,8 +195,8 @@ def fetch_fundamental_features(
     for ticker in tickers:
         earnings = _fetch_ticker_earnings(ticker)
         n_quarters = len(earnings)
-        logger.debug(f"  {ticker}: {n_quarters} earnings quarters available "
-                     f"({'N/A' if earnings.empty else str(earnings.index.min().date()) + ' → ' + str(earnings.index.max().date())})")
+        # logger.debug(f"  {ticker}: {n_quarters} earnings quarters available "
+        #              f"({'N/A' if earnings.empty else str(earnings.index.min().date()) + ' → ' + str(earnings.index.max().date())})")
 
         price_series = prices[ticker] if ticker in prices.columns else pd.Series(dtype=float)
         feats = _build_ticker_features(ticker, earnings, price_series, trading_dates)
