@@ -38,7 +38,7 @@ from data.sp500 import (
 )
 from signals.residuals import rolling_ols_decompose, forward_cross_sectional_excess
 from signals.sector import SectorRegimeModel
-from signals.cross_section import CrossSectionalModel, build_features
+from signals.cross_section import CrossSectionalModel, MomentumRankModel, build_features
 from signals.sector_rotation import SectorRotationModel, fetch_macro_data
 from portfolio.optimizer import construct_weights
 from backtest.engine import SectorBacktest
@@ -97,7 +97,7 @@ def _run_sector_pipeline(sector_name: str, sector_cfg: dict, cik_map: dict):
         stock_ret, residuals, betas, regime_proba, sector_ret,
         fundamentals=fundamentals, volumes=volumes,
     )
-    alpha_model = CrossSectionalModel(sector_cfg["alpha_model"])
+    alpha_model = MomentumRankModel()
 
     logger.info(
         f"  {sector_name}: {stock_ret.shape[1]} stocks × {len(stock_ret)} days "

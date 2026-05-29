@@ -400,13 +400,14 @@ class MomentumRankModel:
     """
 
     _WEIGHTS = {
-        "mom_12_1":          0.55,   # 12-1 month price momentum — primary cross-regime signal
-        "eps_growth_yoy":    0.25,   # fundamental confirmation
-        "revenue_growth_yoy":0.20,   # revenue momentum (SEC EDGAR, real data now)
-        # vol_ratio removed: was added to penalise IPO crash stocks (CRWD/DDOG).
-        # With those excluded by the 20% threshold, the penalty was down-ranking
-        # legitimate high-momentum names in Financials/Staples during 2022.
-        # high_52w_ratio, revenue_acceleration in FEATURE_COLS for future LightGBM.
+        "mom_12_1":       0.65,   # 12-1 month price momentum — dominant cross-regime signal
+        "eps_growth_yoy": 0.35,   # fundamental confirmation (EPS more reliable than revenue
+                                  # across all sectors — banks report revenue differently)
+        # revenue_growth_yoy excluded: EDGAR coverage is uneven (banks report 0%),
+        # creating inconsistent rankings within Financials sector.
+        # All new features (high_52w_ratio, revenue_acceleration, gross_margin,
+        # log_market_cap, ipo_age_days) stay in FEATURE_COLS for future LightGBM
+        # with regime-aware training. Fixed-weight composites can't use them safely.
     }
 
     def __init__(self, cfg: dict = None):
