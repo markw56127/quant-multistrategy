@@ -61,6 +61,8 @@ FEATURE_COLS = [
     "eps_revision_trend",    # rolling sign of revisions (yfinance, sparse)
     "revenue_growth_yoy",    # YoY quarterly revenue growth (SEC EDGAR)
     "log_market_cap",        # log(price × shares_outstanding) — SEC EDGAR, point-in-time
+    "ipo_age_days",          # calendar days since first trade — captures post-IPO momentum
+                             # pattern; NaN before listing so LightGBM ignores pre-existence
     "trailing_pe",
     "peg_ratio",
     "pe_rank_cs",
@@ -92,6 +94,9 @@ def build_features(
     # Proxies the vol-regime split (Item 6) without needing two separate models
     s_vol_pctile = sector_vol.rolling(252, min_periods=63).rank(pct=True).shift(1)
 
+    # First-trade dates: first non-NaN date per stock — used for ipo_age feature
+    first_trade = stock_returns.apply(lambda s: s.first_valid_index())
+
     records: List[pd.DataFrame] = []
     for ticker in residuals.columns:
         r   = residuals[ticker]
@@ -117,6 +122,23 @@ def build_features(
 
         df["beta"] = b.shift(1)
         df = df.join(regime_proba.shift(1))
+
+        # IPO age: log(trading days since first listing).
+        # Captures two documented effects:
+        #   1. Post-IPO momentum: newly listed stocks outperform for 12-18 months
+        #      (Ritter & Welch 2002) — high ipo_age_score early on
+        #   2. Avoids treating pre-IPO NaN as a signal — the feature is NaN
+        #      before the stock exists, which LightGBM handles as missing
+        # For stocks with full history, ipo_age is large and effectively neutral
+        # in cross-sectional z-scoring.
+        t0 = first_trade.get(ticker)
+        if t0 is not None and pd.notna(t0):
+            days_listed = pd.Series(
+                [(d - t0).days for d in r.index], index=r.index, dtype=float
+            )
+            df["ipo_age_days"] = days_listed.where(days_listed > 0)
+        else:
+            df["ipo_age_days"] = np.nan
 
         # Cross-sectional market context (same for all tickers each day)
         df["cs_dispersion"]    = cs_disp
