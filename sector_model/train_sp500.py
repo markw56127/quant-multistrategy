@@ -189,17 +189,20 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     # ── Sector rotation model ─────────────────────────────────────────────
     logger.info("═══ Stage 5: Initialising sector rotation model ═══")
     active_loaded = [s for s in ACTIVE_SECTORS if s in pipelines]
+    rot_cfg = base_cfg.get("rotation", {})
     rotation_model = SectorRotationModel(
         sector_etf_returns=etf_ret[[s for s in active_loaded if s in etf_ret.columns]],
         macro=macro,
         sectors=active_loaded,
+        top_n_sectors=rot_cfg.get("top_n_sectors", 4),
+        min_sector_alloc=rot_cfg.get("min_sector_alloc", 0.10),
     )
 
     # ── Walk-forward two-layer backtest ───────────────────────────────────
     logger.info("═══ Stage 6: Walk-forward two-layer backtest ═══")
     bt_cfg     = base_cfg["backtest"]
     port_cfg   = base_cfg["portfolio"]
-    rebal_freq = bt_cfg.get("rebalance_freq", 20)
+    rebal_freq = bt_cfg.get("rebalance_freq", 40)
     train_win  = bt_cfg.get("train_window", 504)
     retrain_n  = bt_cfg.get("retrain_every_n", 3)
     trans_cost = bt_cfg.get("transaction_cost", 0.001)
@@ -207,7 +210,8 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     target_vol   = port_cfg.get("target_vol", 0.15)
     min_exposure = port_cfg.get("min_exposure", 0.50)
     max_exposure = port_cfg.get("max_exposure", 1.00)
-    max_pos      = port_cfg.get("max_position_size", 0.05)  # tighter: 500 stocks
+    max_pos      = port_cfg.get("max_position_size", 0.20)
+    vol_penalty  = port_cfg.get("vol_penalty", 0.3)   # soft vol penalty for momentum
 
     # Use the largest-overlap trading dates across sectors
     all_dates = sorted(set.intersection(*[
@@ -277,10 +281,11 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
 
             within_wt = construct_weights(
                 scores, vol_now, spy_vol,
-                n_long=n_long, max_pos=1.0,  # no single-stock cap here
+                n_long=n_long, max_pos=max_pos,
                 target_vol=target_vol,
                 min_exposure=min_exposure,
                 max_exposure=max_exposure,
+                vol_penalty=vol_penalty,
             )
             # Apply sector allocation: final stock weight = sector_wt × within_wt
             for stock, w in within_wt[within_wt > 0].items():
@@ -357,8 +362,8 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Two-layer S&P 500 portfolio")
-    parser.add_argument("--config", default="config/sectors/financials.yaml",
-                        help="Base config (modelling params only; data section overridden)")
+    parser.add_argument("--config", default="config/sp500.yaml",
+                        help="S&P 500 pipeline config")
     parser.add_argument("--out", default="results/sp500/backtest.csv")
     args = parser.parse_args()
 

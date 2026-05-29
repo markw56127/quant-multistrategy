@@ -40,6 +40,7 @@ def construct_weights(
     target_vol:      float = 0.15,
     min_exposure:    float = 0.50,
     max_exposure:    float = 1.00,
+    vol_penalty:     float = 1.0,
 ) -> pd.Series:
     """
     Build a long-only weight vector from cross-sectional alpha scores.
@@ -53,6 +54,9 @@ def construct_weights(
         target_vol      : target annualised portfolio volatility
         min_exposure    : floor gross exposure
         max_exposure    : ceiling gross exposure
+        vol_penalty     : 0 = pure score weighting, 1 = full inverse-vol penalty.
+                          Use < 1 for momentum strategies where high-vol stocks
+                          (e.g., NVDA) should not be systematically down-weighted.
     Returns:
         weights         : Series of non-negative weights summing to gross_target.
     """
@@ -69,10 +73,13 @@ def construct_weights(
     v     = stock_vol.reindex(longs).fillna(stock_vol.mean())
     inv_v = 1.0 / (v + 1e-8)
 
-    # Score-weighted sizing: rank within selected longs × inverse-vol
-    # Higher-conviction AND lower-vol positions receive more capital
+    # Score-weighted sizing with adjustable vol penalty.
+    # vol_penalty=1.0: score_rank × inv_vol (Kelly-proportional, default)
+    # vol_penalty=0.0: pure score_rank (momentum strategies, don't penalise high-vol)
+    # vol_penalty=0.3: soft penalty — momentum wins but extreme vol is still dampened
     score_rank = scores.reindex(longs).rank()   # 1=weakest long, n=strongest
-    sizing     = score_rank * inv_v
+    inv_v_norm = inv_v / inv_v.mean()           # normalise so penalty magnitude is stable
+    sizing     = score_rank * (inv_v_norm ** vol_penalty)
     raw_w      = sizing / sizing.sum()
 
     weights = pd.Series(0.0, index=scores.index)

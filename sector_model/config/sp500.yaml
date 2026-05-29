@@ -1,0 +1,43 @@
+data:
+  start_date: "2015-01-01"
+  end_date:   "2024-12-31"
+
+signals:
+  ols_window:       60
+  ols_min_periods:  30
+  forward_horizon:  40
+  vol_window:       21
+
+regime:
+  n_states:    3
+  n_iter:      300
+  vol_window:  21
+
+alpha_model:
+  n_estimators:         200
+  num_leaves:           15
+  learning_rate:        0.05
+  feature_fraction:     0.7
+  bagging_fraction:     0.8
+  bagging_freq:         5
+  min_child_samples:    30
+  early_stopping_rounds: 40
+
+portfolio:
+  n_long:            8      # top-8 momentum names per sector
+  max_position_size: 0.20
+  target_vol:        0.15
+  min_exposure:      0.50
+  max_exposure:      1.00
+  vol_penalty:       0.3    # soft vol penalty — momentum drives sizing, not inverse-vol
+
+backtest:
+  initial_capital:   1_000_000
+  rebalance_freq:    40          # 40-day periods; momentum is medium-term, cuts turnover
+  train_window:      504
+  retrain_every_n:   3
+  transaction_cost:  0.001
+
+rotation:
+  top_n_sectors:     3           # concentrate in top 3 macro calls, not 4
+  min_sector_alloc:  0.10
