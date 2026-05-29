@@ -141,6 +141,10 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     pipelines: Dict[str, dict] = {}
     for sector in ACTIVE_SECTORS:
         etf     = SECTOR_ETFS[sector]
+        # Skip sectors whose ETF doesn't have data (e.g., XLC created 12/2018, no 2015 data)
+        if etf not in etf_ret.columns:
+            logger.warning(f"{sector} ({etf}): ETF has no data for backtest period — skipping")
+            continue
         tickers = get_sector_tickers(sp500, sector)
         if not tickers:
             continue
