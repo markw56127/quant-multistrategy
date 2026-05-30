@@ -31,15 +31,18 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sector_model"))
 from data.universe import fetch_prices  # noqa: E402
 
+# shared infrastructure
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "shared"))
+from universe_pit import (  # noqa: E402
+    historical_universe, membership_matrix, fetch_sectors,
+    fetch_prices_survivorship_free,
+)
+
 # factor_model modules
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
 from construction import long_short_weights, long_only_weights, turnover  # noqa: E402
-from universe_pit import (  # noqa: E402
-    historical_universe, membership_matrix, fetch_sectors,
-    fetch_prices_survivorship_free,
-)
 
 
 def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:

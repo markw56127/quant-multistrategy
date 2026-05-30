@@ -43,6 +43,13 @@ from signals.sector_rotation import SectorRotationModel, fetch_macro_data
 from portfolio.optimizer import construct_weights
 from backtest.engine import SectorBacktest
 
+# Shared survivorship-free universe infrastructure
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "shared"))
+from universe_pit import (  # noqa: E402
+    historical_universe, membership_matrix, fetch_sectors,
+    fetch_prices_survivorship_free,
+)
+
 
 def load_base_config(path: str = "config/sectors/financials.yaml") -> dict:
     """Load a base config — only the modelling params are used; data section is overridden."""
@@ -50,18 +57,24 @@ def load_base_config(path: str = "config/sectors/financials.yaml") -> dict:
         return yaml.safe_load(f)
 
 
-def _run_sector_pipeline(sector_name: str, sector_cfg: dict, cik_map: dict):
+def _run_sector_pipeline(sector_name: str, sector_cfg: dict, cik_map: dict, sf_data: dict = None):
     """
     Run the full within-sector pipeline for one GICS sector.
 
     Uses SEC EDGAR for fundamental data (reliable filing dates, 2009+)
-    and MomentumRankModel for within-sector stock selection (price momentum
-    + fundamental momentum blend — no fitting, no overfitting).
+    and MomentumRankModel for within-sector stock selection.
+
+    `sf_data`: when provided (survivorship-free mode), use these pre-loaded
+    survivorship-free returns/prices instead of load_sector_data's current-
+    constituent fetch.
     """
     cache_dir = sector_cfg["data"]["cache_dir"]
     sig_cfg   = sector_cfg["signals"]
 
-    stock_ret, sector_ret, prices = load_sector_data(sector_cfg["data"], cache_dir)
+    if sf_data is not None:
+        stock_ret, sector_ret, prices = sf_data["stock_ret"], sf_data["sector_ret"], sf_data["prices"]
+    else:
+        stock_ret, sector_ret, prices = load_sector_data(sector_cfg["data"], cache_dir)
     if stock_ret.shape[1] < 5:
         logger.warning(f"{sector_name}: only {stock_ret.shape[1]} stocks after filter — skipping")
         return None
@@ -118,10 +131,24 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
     start_date = base_cfg["data"]["start_date"]
     end_date   = base_cfg["data"]["end_date"]
     sp500_cache = "cache/sp500"
+    survivorship_free = base_cfg.get("survivorship_free", False)
 
     # ── Universe ──────────────────────────────────────────────────────────
     logger.info("═══ Stage 1: Loading S&P 500 universe ═══")
     sp500 = fetch_sp500_universe(cache_dir=sp500_cache)
+
+    # ── Survivorship-free universe (point-in-time membership + delisted prices)
+    sf_prices = sf_sectors = members_mat = None
+    if survivorship_free:
+        logger.info("═══ Stage 1b: Survivorship-free universe ═══")
+        hist_tickers = historical_universe(start_date, end_date, cache_dir=sp500_cache)
+        sf_prices = fetch_prices_survivorship_free(
+            hist_tickers, start_date, end_date, cache_dir=sp500_cache)
+        seed = sp500.set_index("Symbol")["GICS Sector"].to_dict()
+        sf_sectors = fetch_sectors(list(sf_prices.columns), seed=seed, cache_dir=sp500_cache)
+        members_mat = membership_matrix(sf_prices.index, cache_dir=sp500_cache)
+        logger.info(f"Survivorship-free: {sf_prices.shape[1]} stocks "
+                    f"(vs {sp500.shape[0]} current constituents)")
 
     # ── Macro data for sector rotation ────────────────────────────────────
     logger.info("═══ Stage 2: Fetching macro data (VIX, yields) ═══")
@@ -166,19 +193,41 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
         if sector not in etf_ret.columns:
             logger.warning(f"{sector} ({etf}): ETF has no data for backtest period — skipping")
             continue
-        tickers = get_sector_tickers(sp500, sector)
-        if not tickers:
-            continue
+        # Universe: historical sector members (survivorship-free) or current
+        if survivorship_free:
+            sec_members = [t for t in sf_prices.columns if sf_sectors.get(t) == sector]
+            if len(sec_members) < 5:
+                continue
+            tickers = sec_members
+        else:
+            tickers = get_sector_tickers(sp500, sector)
+            if not tickers:
+                continue
+
         cfg = build_sector_cfg(
             tickers=tickers,
             sector_etf=etf,
             base_cfg=base_cfg,
             cache_subdir=f"cache/sp500/{sector.lower().replace(' ', '_')}",
         )
+
+        # Pre-load survivorship-free per-sector returns when enabled
+        sf_data = None
+        if survivorship_free:
+            sec_px = sf_prices[tickers]
+            sec_etf_ret = etf_ret[sector] if sector in etf_ret.columns else None
+            stock_ret_sf = np.log(sec_px / sec_px.shift(1))
+            sf_data = {
+                "stock_ret":  stock_ret_sf.dropna(how="all"),
+                "sector_ret": sec_etf_ret,
+                "prices":     sec_px,
+            }
+
         logger.info(f"  ── {sector} ({etf}) — {len(tickers)} candidates ──")
-        result = _run_sector_pipeline(sector, cfg, cik_map=cik_map)
+        result = _run_sector_pipeline(sector, cfg, cik_map=cik_map, sf_data=sf_data)
         if result:
             result["cfg"] = cfg
+            result["sector_name"] = sector
             pipelines[sector] = result
 
     if not pipelines:
@@ -281,6 +330,15 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
             except Exception:
                 continue
 
+            # Survivorship-free: restrict to stocks that were index members
+            # on this date (and still trading — non-NaN price)
+            if members_mat is not None and rebal_date in members_mat.index:
+                row = members_mat.loc[rebal_date]
+                pit_members = set(row.index[row.values])
+                scores = scores[scores.index.isin(pit_members)]
+                if scores.empty:
+                    continue
+
             vol_now  = pipe["residuals"].rolling(21).std().loc[rebal_date] \
                        .reindex(scores.index).fillna(0.02)
             sec_port_cfg = pipe["cfg"].get("portfolio", port_cfg)
@@ -378,17 +436,26 @@ if __name__ == "__main__":
              "by the sector rotation lookback; only rebalances on/after this "
              "date are executed. Example: --oos-start 2022-01-01",
     )
+    parser.add_argument(
+        "--survivorship-free", action="store_true",
+        help="Use point-in-time S&P 500 membership + delisted-name prices "
+             "to remove survivorship bias from stock selection.",
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
         import yaml
         base_cfg = yaml.safe_load(f)
 
+    if args.survivorship_free:
+        base_cfg["survivorship_free"] = True
+
+    out = args.out
+    if args.survivorship_free:
+        out = out.replace(".csv", "_sf.csv")
     if args.oos_start:
         base_cfg["oos_start"] = args.oos_start
-        out = args.out.replace(".csv", f"_oos_{args.oos_start[:4]}.csv")
+        out = out.replace(".csv", f"_oos_{args.oos_start[:4]}.csv")
         logger.info(f"OOS run: rebalances from {args.oos_start}, saving to {out}")
-    else:
-        out = args.out
 
     run_sp500(base_cfg, out_path=out)
