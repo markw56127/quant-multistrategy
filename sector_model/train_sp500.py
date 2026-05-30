@@ -216,10 +216,17 @@ def run_sp500(base_cfg: dict, out_path: str = "results/sp500/backtest.csv") -> p
         if survivorship_free:
             sec_px = sf_prices[tickers]
             sec_etf_ret = etf_ret[sector] if sector in etf_ret.columns else None
-            stock_ret_sf = np.log(sec_px / sec_px.shift(1))
+            # Align to the ETF return index, fill non-trading returns with 0.
+            # Delisted/pre-IPO stocks get 0 returns when not trading; the
+            # point-in-time membership filter excludes them from selection then,
+            # so the 0s only keep the rolling OLS panel rectangular (no NaN/SVD
+            # failures) without affecting which stocks can actually be held.
+            common_idx = sec_etf_ret.index.intersection(sec_px.index)
+            sec_px = sec_px.reindex(common_idx)
+            stock_ret_sf = np.log(sec_px / sec_px.shift(1)).fillna(0.0)
             sf_data = {
-                "stock_ret":  stock_ret_sf.dropna(how="all"),
-                "sector_ret": sec_etf_ret,
+                "stock_ret":  stock_ret_sf,
+                "sector_ret": sec_etf_ret.reindex(common_idx),
                 "prices":     sec_px,
             }
 
