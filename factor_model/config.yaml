@@ -13,5 +13,15 @@ portfolio:
   mode:     "long_short"      # long_short | long_only
   quantile: 0.20             # top/bottom 20% (quintile spread)
 
+factors:
+  # Factors entering the composite. size dropped (survivorship-biased, +187%
+  # positive every year — not a real signal). low_vol dropped (lagged the
+  # 2015-2024 bull market, Sharpe -0.68). Value + Quality + Momentum are the
+  # academically robust, diversifying core.
+  composite: ["value", "quality", "momentum"]
+
+universe:
+  point_in_time: true        # use historical S&P 500 membership (survivorship fix)
+
 # Out-of-sample split (optional, set via --oos-start CLI flag)
 oos_start: null

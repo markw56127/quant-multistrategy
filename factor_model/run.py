@@ -29,14 +29,14 @@ from loguru import logger
 
 # Reuse sector_model data infrastructure
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sector_model"))
-from data.sp500 import fetch_sp500_universe, SECTOR_ETFS  # noqa: E402
 from data.universe import fetch_prices  # noqa: E402
 
 # factor_model modules
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
-from portfolio import long_short_weights, long_only_weights, turnover  # noqa: E402
+from construction import long_short_weights, long_only_weights, turnover  # noqa: E402
+from universe_pit import historical_universe, membership_matrix, fetch_sectors  # noqa: E402
 
 
 def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
@@ -45,20 +45,32 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
     pf  = cfg["portfolio"]
     cache = d["cache_dir"]
 
-    # ── Universe ──────────────────────────────────────────────────────────
+    pit = cfg.get("universe", {}).get("point_in_time", True)
+
+    # ── Universe (point-in-time membership) ───────────────────────────────
     logger.info("═══ Stage 1: S&P 500 universe ═══")
-    sp500 = fetch_sp500_universe(cache_dir=cache)
-    tickers = sp500["Symbol"].tolist()
-    sectors = sp500.set_index("Symbol")["GICS Sector"]
+    if pit:
+        tickers = historical_universe(d["start_date"], d["end_date"], cache_dir=cache)
+        logger.info(f"Historical universe (ever a member 2015-2024): {len(tickers)} tickers")
+    else:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sector_model"))
+        from data.sp500 import fetch_sp500_universe
+        tickers = fetch_sp500_universe(cache_dir=cache)["Symbol"].tolist()
 
     # ── Prices ────────────────────────────────────────────────────────────
     logger.info("═══ Stage 2: Prices ═══")
     prices = fetch_prices(tickers, d["start_date"], d["end_date"], cache_dir=cache)
-    # Drop the sector-ETF columns if present; keep only stocks we have sectors for
-    valid = [t for t in prices.columns if t in sectors.index]
-    prices = prices[valid]
-    sectors = sectors.reindex(valid)
-    logger.info(f"Prices: {prices.shape[1]} stocks × {len(prices)} days")
+    valid = list(prices.columns)
+    logger.info(f"Prices: {prices.shape[1]} of {len(tickers)} tickers have data")
+
+    # Sectors: seed with Wikipedia GICS for current members, look up the rest
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sector_model"))
+    from data.sp500 import fetch_sp500_universe
+    seed = fetch_sp500_universe(cache_dir=cache).set_index("Symbol")["GICS Sector"].to_dict()
+    sectors = fetch_sectors(valid, seed=seed, cache_dir=cache)
+
+    # Point-in-time membership matrix (which stocks were members each day)
+    members_mat = membership_matrix(prices.index, cache_dir=cache) if pit else None
 
     # ── Fundamentals ──────────────────────────────────────────────────────
     logger.info("═══ Stage 3: SEC EDGAR fundamentals ═══")
@@ -81,6 +93,8 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
     init_cap   = bt["initial_capital"]
     mode       = pf["mode"]
     quantile   = pf["quantile"]
+    comp_factors = cfg.get("factors", {}).get("composite", FACTORS)
+    logger.info(f"Composite factors: {comp_factors}")
 
     dates = prices.index
     rebal_dates = dates[warmup::rebal_freq]
@@ -97,7 +111,16 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
     weight_fn = long_short_weights if mode == "long_short" else long_only_weights
 
     for i, rd in enumerate(rebal_dates):
-        scores = compute_factor_scores(rd, prices, fundamentals, sectors)
+        # Point-in-time members on this date
+        members = None
+        if members_mat is not None and rd in members_mat.index:
+            row = members_mat.loc[rd]
+            members = set(row.index[row.values])
+
+        scores = compute_factor_scores(
+            rd, prices, fundamentals, sectors,
+            members=members, composite_factors=comp_factors,
+        )
         if scores.empty:
             continue
 

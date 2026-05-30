@@ -66,6 +66,8 @@ def compute_factor_scores(
     prices: pd.DataFrame,         # (T, N) adjusted close
     fundamentals: pd.DataFrame,   # (date, ticker) MultiIndex panel
     sectors: pd.Series,           # ticker -> GICS sector
+    members: Optional[set] = None,         # point-in-time index members at `date`
+    composite_factors: Optional[List[str]] = None,  # which factors enter composite
 ) -> pd.DataFrame:
     """
     Compute sector-neutral factor z-scores for every stock as of `date`.
@@ -73,13 +75,24 @@ def compute_factor_scores(
     Returns a DataFrame indexed by ticker with columns:
       value, momentum, quality, low_vol, size, composite
     Stocks with insufficient data are dropped.
+
+    `members`: if given, restrict the universe to point-in-time index members
+    (survivorship-bias correction). `composite_factors`: subset of FACTORS that
+    enter the composite (default all five). All factors are still computed and
+    returned for attribution.
     """
+    composite_factors = composite_factors or FACTORS
+
     # Universe at this date: stocks with a valid price
     px_hist = prices.loc[:date]
     if len(px_hist) < 252:
         return pd.DataFrame()
     last_px = px_hist.iloc[-1]
     universe = last_px.dropna().index
+    if members is not None:
+        universe = universe.intersection(pd.Index(list(members)))
+    if len(universe) < 20:
+        return pd.DataFrame()
 
     # ── Fundamentals snapshot as of `date` ────────────────────────────────
     try:
@@ -135,7 +148,7 @@ def compute_factor_scores(
     for f in FACTORS:
         out[f] = _sector_neutralize(raw[f], sectors)
 
-    # ── Equal-weight composite over available (non-NaN) factors ───────────
-    out["composite"] = out[FACTORS].mean(axis=1)
+    # ── Equal-weight composite over the SELECTED factors only ─────────────
+    out["composite"] = out[composite_factors].mean(axis=1)
     out = out.dropna(subset=["composite"])
     return out
