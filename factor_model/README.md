@@ -1,6 +1,31 @@
 # Multi-Factor Equity Model
 
-**Status:** ACTIVE — this is the model we're building next
+**Status:** v0 BUILT — value+quality composite, survivorship-corrected.
+
+## Results (v0, survivorship-free, 2016-2024, long-short market-neutral)
+
+| Composite | Total | Sharpe | Max DD | Notes |
+|-----------|-------|--------|--------|-------|
+| **value + quality** | **+33.1%** | **0.61** | −9.3% | positive 7/9 yrs, +6.6% in 2022 crash |
+| value + quality + momentum | +5.2% | 0.14 | −10.3% | momentum drags |
+| value only | +46.8% | 0.41 | −25.5% | higher return, much deeper drawdown |
+
+Per-factor long-short Sharpes (survivorship-free):
+value +0.41, quality +0.27, size +0.26, low_vol −0.16, momentum −0.27.
+
+**Key finding — survivorship bias is real and large.** The size factor read
++187% (Sharpe 1.44, positive every single year) on the *current*-constituent
+universe. After (a) point-in-time membership and (b) keeping delisted names'
+prices, it collapsed to a realistic +23% (Sharpe 0.26) — matching the
+literature that the size premium is ~dead post-1980s. Value and quality
+survived the correction; they are the genuine signal.
+
+**Known limitation:** ~19% of historical members (145/755) have no free price
+data (full delistings/bankruptcies — disproportionately the worst outcomes),
+so a residual upward bias remains. Proper fix needs CRSP/Compustat.
+
+## Original plan (below) — mostly realised
+
 
 ## Concept
 
