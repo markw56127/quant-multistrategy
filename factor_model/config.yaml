@@ -14,11 +14,15 @@ portfolio:
   quantile: 0.20             # top/bottom 20% (quintile spread)
 
 factors:
-  # Factors entering the composite. size dropped (survivorship-biased, +187%
-  # positive every year — not a real signal). low_vol dropped (lagged the
-  # 2015-2024 bull market, Sharpe -0.68). Value + Quality + Momentum are the
-  # academically robust, diversifying core.
-  composite: ["value", "quality", "momentum"]
+  # Validated on the survivorship-free universe:
+  #   value   Sharpe +0.41  (robust)
+  #   quality Sharpe +0.27  (robust)
+  #   momentum Sharpe -0.27 (genuinely weak in sector-neutral large-cap 2015-24)
+  #   size    Sharpe +0.26  (was +1.44 with survivorship bias — now ~dead, dropped)
+  #   low_vol Sharpe -0.16  (lagged the bull market, dropped)
+  # value + quality: +33% total, Sharpe 0.61, maxDD -9.3%, market-neutral,
+  # and POSITIVE in 2022 (+6.6%) when the market crashed.
+  composite: ["value", "quality"]
 
 universe:
   point_in_time: true        # use historical S&P 500 membership (survivorship fix)

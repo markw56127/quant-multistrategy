@@ -36,7 +36,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
 from construction import long_short_weights, long_only_weights, turnover  # noqa: E402
-from universe_pit import historical_universe, membership_matrix, fetch_sectors  # noqa: E402
+from universe_pit import (  # noqa: E402
+    historical_universe, membership_matrix, fetch_sectors,
+    fetch_prices_survivorship_free,
+)
 
 
 def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
@@ -59,7 +62,12 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
 
     # ── Prices ────────────────────────────────────────────────────────────
     logger.info("═══ Stage 2: Prices ═══")
-    prices = fetch_prices(tickers, d["start_date"], d["end_date"], cache_dir=cache)
+    if pit:
+        # Survivorship-free: keep delisted names (partial history)
+        prices = fetch_prices_survivorship_free(
+            tickers, d["start_date"], d["end_date"], cache_dir=cache)
+    else:
+        prices = fetch_prices(tickers, d["start_date"], d["end_date"], cache_dir=cache)
     valid = list(prices.columns)
     logger.info(f"Prices: {prices.shape[1]} of {len(tickers)} tickers have data")
 

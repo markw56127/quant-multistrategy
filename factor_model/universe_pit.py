@@ -122,6 +122,42 @@ _YF_TO_GICS = {
 }
 
 
+def fetch_prices_survivorship_free(
+    tickers: List[str],
+    start: str,
+    end: str,
+    cache_dir: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Fetch adjusted-close prices KEEPING partial-history names. Unlike
+    sector_model's fetch_prices (which drops >20% missing), this retains
+    delisted stocks — they have valid prices until delisting, then NaN. The
+    factor computation handles NaN per-date, so a stock simply leaves the
+    investable universe once it stops trading. This is essential for
+    survivorship-free backtesting.
+
+    Keeps any column with ≥60 valid observations (enough to be scored at all).
+    """
+    if cache_dir:
+        p = Path(cache_dir) / f"prices_sf_{start}_{end}.parquet"
+        if p.exists():
+            logger.info(f"Loading cached survivorship-free prices from {p}")
+            return pd.read_parquet(p)
+
+    logger.info(f"Fetching {len(tickers)} tickers (survivorship-free) [{start} → {end}]...")
+    raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
+    prices = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+    prices = prices.ffill(limit=5)
+    keep = prices.columns[prices.notna().sum() >= 60]
+    prices = prices[keep]
+    logger.info(f"Kept {prices.shape[1]} of {len(tickers)} tickers (≥60 obs)")
+
+    if cache_dir:
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        prices.to_parquet(Path(cache_dir) / f"prices_sf_{start}_{end}.parquet")
+    return prices
+
+
 def fetch_sectors(
     tickers: List[str],
     seed: Optional[Dict[str, str]] = None,
