@@ -1,6 +1,32 @@
 # Earnings PEAD Model
 
-**Status:** Idea / not started
+**Status:** v0 BUILT — survivorship-free, market-neutral.
+
+## Results (v0, 2016-2024, monthly rebalance, NET of costs)
+
+| | Gross | Net (after costs) |
+|---|-------|-------------------|
+| Total | +66.1% | **+39.2%** |
+| Sharpe | 0.75 | **0.50** |
+| Max DD | — | −19.2% |
+| Beta to SPY | — | **+0.00** (market-neutral) |
+
+- Positive in 8 of 9 years gross; **+7.6% net in 2022** (the market-neutral
+  payoff — makes money when the market falls).
+- 17,473 earnings announcements across 563 tickers.
+- Built survivorship-free from day one (shared/universe_pit.py).
+
+**Cost sensitivity matters here.** Weekly rebalancing churned a 100-name book
+(0.59 turnover/wk → 3%/yr drag → net Sharpe collapsed to 0.25). The 60-day
+drift doesn't need weekly trading; monthly rebalancing cut turnover ~4× and
+recovered net Sharpe to 0.50. PEAD is a real signal but turnover-sensitive.
+
+**SUE = seasonal random walk** (no analyst data): expected EPS = same fiscal
+quarter prior year; SUE = unexpected / trailing-8-quarter std. Self-consistent
+across the FY/quarterly XBRL reporting wrinkle.
+
+## Original plan (below) — realised
+
 
 ## Concept
 

@@ -4,7 +4,10 @@ data:
   cache_dir:  "cache"
 
 backtest:
-  rebalance_freq:   5         # rebalance weekly (earnings cluster; need responsiveness)
+  rebalance_freq:   20        # rebalance monthly. Weekly churned a 100-name book
+                              # (0.59 turnover/wk = 3%/yr cost drag, net Sharpe 0.25).
+                              # The 60-day drift doesn't need weekly trading; monthly
+                              # cuts turnover ~4x while still capturing the drift.
   drift_window:     60        # trading days a stock stays in book after announcing
                               # (PEAD drift persists ~1-3 months: Bernard-Thomas 1989)
   warmup_days:      252
