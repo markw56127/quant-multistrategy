@@ -177,9 +177,18 @@ def fetch_factor_fundamentals(
     n = len(tickers)
     for i, ticker in enumerate(tickers):
         cache_path = Path(cache_dir) / f"{ticker}_factor_fund.parquet" if cache_dir else None
+        feat = None
         if cache_path and cache_path.exists():
             feat = pd.read_parquet(cache_path)
-        else:
+            # STALENESS CHECK (2026-06): cached frames are reindexed to the
+            # trading calendar at BUILD time. If the requested calendar now
+            # extends well past the cached frame's last date, the cache was
+            # built against an older end_date and must be rebuilt — otherwise
+            # 2025+ rows would silently carry missing/stale fundamentals.
+            if len(feat) == 0 or feat.index.max() < trading_dates.max() - pd.Timedelta(days=60):
+                logger.debug(f"  {ticker}: fundamentals cache stale — rebuilding from EDGAR")
+                feat = None
+        if feat is None:
             cik = cik_map.get(ticker.upper())
             if cik is None:
                 continue

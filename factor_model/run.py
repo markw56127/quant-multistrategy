@@ -101,6 +101,7 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
     rebal_freq = bt["rebalance_freq"]
     warmup     = bt["warmup_days"]
     tcost      = bt["transaction_cost"]
+    borrow_rate = bt.get("borrow_rate_annual", 0.01)
     init_cap   = bt["initial_capital"]
     mode       = pf["mode"]
     quantile   = pf["quantile"]
@@ -150,6 +151,12 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
         fwd_simple = np.exp(fwd) - 1
 
         port_ret = float((w * fwd_simple.reindex(w.index).fillna(0)).sum())
+
+        # Borrow fee on the short book (added 2026-06, parity with earnings_model):
+        # annualised general-collateral rate, pro-rata over the holding period.
+        short_gross = float(w[w < 0].abs().sum())
+        borrow_cost = borrow_rate * (end_idx - date_idx) / 252.0 * short_gross
+        port_ret -= borrow_cost
         capital *= (1.0 + port_ret)
 
         # Per-factor standalone long-short return (attribution)
@@ -168,6 +175,7 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
 
         rec = {
             "date": rd, "capital": capital, "period_return": port_ret,
+            "borrow_cost": borrow_cost,
             "benchmark_return": bench, "turnover": to, "ic": ic,
             "n_long": int((w > 0).sum()), "n_short": int((w < 0).sum()),
         }

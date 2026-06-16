@@ -27,7 +27,14 @@ ROOT = Path(__file__).resolve().parent
 STRATS = {
     "factor_vq": ROOT / "factor_model"   / "results" / "backtest.csv",
     "pead":      ROOT / "earnings_model" / "results" / "backtest.csv",
+    # Shelved sleeve-#3 candidates (2026-06), both ~zero standalone Sharpe:
+    #   "insider":    insider_model/results/backtest.csv   (two attempts, 0.13 / -0.01)
+    #   "sector_rot": sector_rotation/results/backtest.csv (0.03, vol 14.8%)
+    # See their READMEs. The book is the two real sleeves above until a
+    # candidate clears standalone Sharpe >= ~0.3 with low correlation.
 }
+# Sleeves whose results don't exist yet are skipped automatically.
+STRATS = {k: p for k, p in STRATS.items() if p.exists()}
 ANNUALISE = 12   # monthly grid
 
 
@@ -61,23 +68,44 @@ def main():
               f"vol={s['ann_vol']:.1%}  maxDD={s['max_dd']:+.1%}")
 
     # Correlation — the key to diversification benefit
-    corr = panel.corr().iloc[0, 1]
-    print(f"\n  Correlation between strategies: {corr:+.2f}")
-    print(f"  (Lower = more diversification benefit when combined)\n")
+    print("\n  Correlation matrix (lower = more diversification benefit):")
+    print(panel.corr().round(2).to_string().replace("\n", "\n  "))
+    print()
 
     # Combined portfolios
     print("── Combined portfolios ──")
     # Equal weight
     ew = panel.mean(axis=1)
     s_ew = stats(ew, "50/50")
-    # Risk parity (inverse-vol, computed on full sample — simple static version)
-    inv = 1.0 / panel.std()
-    w = inv / inv.sum()
-    rp = (panel * w).sum(axis=1)
+
+    # Risk parity — FIXED 2026-06: weights now use only PAST information.
+    # Previously inverse-vol was computed on the full sample (mild lookahead:
+    # month t's weights knew the whole history's vols). Now: expanding-window
+    # vol with a 12-month minimum, weights applied to the FOLLOWING month.
+    MIN_OBS = 12
+    vol_hist = panel.expanding(min_periods=MIN_OBS).std().shift(1)
+    inv_hist = 1.0 / vol_hist
+    w_hist = inv_hist.div(inv_hist.sum(axis=1), axis=0)
+    w_hist = w_hist.fillna(1.0 / panel.shape[1])   # equal-weight until history accrues
+    rp = (panel * w_hist).sum(axis=1)
     s_rp = stats(rp, "risk-parity")
-    for s, wdesc in [(s_ew, "50/50"), (s_rp, f"riskparity {dict(w.round(2))}")]:
+
+    # Vol targeting (added 2026-06): scale the combined stream to a constant
+    # target vol using trailing realised vol (shifted — no current-month info).
+    # Leverage capped at 2x; uncapped leverage on a backtest is fantasy.
+    TARGET_VOL = 0.08   # 8% annualised
+    MAX_LEV    = 2.0
+    realised = rp.expanding(min_periods=MIN_OBS).std().shift(1) * np.sqrt(ANNUALISE)
+    lev = (TARGET_VOL / realised).clip(upper=MAX_LEV).fillna(1.0)
+    rp_vt = rp * lev
+    s_vt = stats(rp_vt, "rp+voltarget")
+
+    final_w = dict(w_hist.iloc[-1].round(2))
+    for s, wdesc in [(s_ew, "50/50"),
+                     (s_rp, f"riskparity(expanding) latest={final_w}"),
+                     (s_vt, f"vol-target {TARGET_VOL:.0%}, lev≤{MAX_LEV:.0f}x, latest lev={lev.iloc[-1]:.2f}")]:
         print(f"  {s['strategy']:<12} total={s['total']:>+7.1%}  Sharpe={s['ann_sharpe']:.2f}  "
-              f"vol={s['ann_vol']:.1%}  maxDD={s['max_dd']:+.1%}")
+              f"vol={s['ann_vol']:.1%}  maxDD={s['max_dd']:+.1%}   [{wdesc}]")
 
     # Diversification summary
     best_single = max(rows, key=lambda x: x["ann_sharpe"])

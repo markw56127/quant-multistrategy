@@ -1,18 +1,28 @@
 # Earnings PEAD Model
 
-**Status:** v0 BUILT — survivorship-free, market-neutral.
+**Status:** v1 — survivorship-free, market-neutral, execution-honest (2026-06).
 
-## Results (v0, 2016-2024, monthly rebalance, NET of costs)
+## Results (v1, 2016-2024, monthly rebalance, NET of costs + borrow)
 
-| | Gross | Net (after costs) |
-|---|-------|-------------------|
-| Total | +66.1% | **+39.2%** |
-| Sharpe | 0.75 | **0.50** |
-| Max DD | — | −19.2% |
-| Beta to SPY | — | **+0.00** (market-neutral) |
+| | v0 (pre-correction) | **v1 (honest)** |
+|---|---------------------|-----------------|
+| Total (net) | +39.2% | **+18.5%** |
+| Sharpe (20d grid) | 0.50 | **0.51** |
+| Sharpe (monthly grid, combiner) | 0.55 | **0.31** |
+| Max DD | −19.2% | **−16.7%** |
 
-- Positive in 8 of 9 years gross; **+7.6% net in 2022** (the market-neutral
-  payoff — makes money when the market falls).
+**2026-06 corrections** (see ../LOOKAHEAD_FINDING.md):
+
+1. *Strict filing-date entry.* Eligibility was `ann_date <= rebalance_date`,
+   but ann_date is the raw SEC filing date (the claimed +1-day shift in
+   _quarterly_series never existed) and filings often land after the close —
+   so same-day entry captured drift that wasn't executable. Now `< rd`.
+2. *Borrow costs.* 1%/yr general-collateral fee on short notional
+   (~9 pts of total return over 9 years).
+
+Roughly half the v0 net return was these two artifacts. What remains is
+still a real, positive, market-neutral drift signal — just a thinner one.
+
 - 17,473 earnings announcements across 563 tickers.
 - Built survivorship-free from day one (shared/universe_pit.py).
 

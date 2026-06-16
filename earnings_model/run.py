@@ -53,7 +53,7 @@ def run_pead(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
     # ── Earnings events ───────────────────────────────────────────────────
     logger.info("═══ Stage 2: Earnings-surprise events (SUE) ═══")
     cik_map = fetch_cik_map(cache_dir=cache)
-    events = build_events(valid, cache_dir=cache, cik_map=cik_map)
+    events = build_events(valid, cache_dir=cache, cik_map=cik_map, end_date=d["end_date"])
     events = events[events["ticker"].isin(valid)].copy()
     logger.info(f"Events: {len(events)} announcements, {events.ticker.nunique()} tickers")
 
@@ -69,6 +69,7 @@ def run_pead(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
     drift_window = bt["drift_window"]          # trading days a stock stays in book
     warmup       = bt["warmup_days"]
     tcost        = bt["transaction_cost"]
+    borrow_rate  = bt.get("borrow_rate_annual", 0.01)  # annualised fee on short notional
     init_cap     = bt["initial_capital"]
     quantile     = pf["quantile"]
     min_names    = pf["min_names"]
@@ -87,8 +88,12 @@ def run_pead(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
 
     for rd in rebal_dates:
         win_start = dates[max(0, dates.get_loc(rd) - drift_window)]
-        # Eligible: announced within the drift window, on/before rd
-        elig = events[(events["ann_date"] > win_start) & (events["ann_date"] <= rd)]
+        # Eligible: announced within the drift window, STRICTLY before rd.
+        # (Fixed 2026-06: was `<= rd`. ann_date is the SEC filing date; filings
+        # often land after the close, so trading the same day's close on that
+        # information is not executable. Strict `<` guarantees the information
+        # is public for at least one full session before we trade it.)
+        elig = events[(events["ann_date"] > win_start) & (events["ann_date"] < rd)]
         if elig.empty:
             continue
         # Most recent announcement per ticker within the window
@@ -121,11 +126,19 @@ def run_pead(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
         ei = min(di + rebal_freq, len(dates) - 1)
         fwd = (prices.iloc[ei] / prices.iloc[di] - 1).reindex(w.index).fillna(0.0)
         port_ret = float((w * fwd).sum())
+
+        # Borrow fee on the short book (added 2026-06): annualised rate charged
+        # pro-rata over the holding period on gross short notional. 1%/yr is a
+        # general-collateral assumption; hard-to-borrow names cost more.
+        short_gross = float(w[w < 0].abs().sum())
+        borrow_cost = borrow_rate * (ei - di) / 252.0 * short_gross
+        port_ret -= borrow_cost
         capital *= (1.0 + port_ret)
 
         bench = float(spy_ret.iloc[di:ei].sum()) if di < len(spy_ret) else 0.0
         records.append({
             "date": rd, "capital": capital, "period_return": port_ret,
+            "borrow_cost": borrow_cost,
             "benchmark_return": bench, "turnover": to,
             "n_long": len(longs), "n_short": len(shorts), "n_eligible": len(sue),
             "avg_sue_long": float(sue[longs].mean()), "avg_sue_short": float(sue[shorts].mean()),

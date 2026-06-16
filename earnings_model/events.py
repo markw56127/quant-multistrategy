@@ -40,8 +40,12 @@ _MIN_HISTORY = 6   # need ≥6 quarters before SUE is meaningful
 def _ticker_events(ticker: str, facts: dict) -> pd.DataFrame:
     """
     Return DataFrame [announcement_date, eps, sue] for one ticker.
-    announcement_date is the filing date (already +1 day shifted by
-    _quarterly_series for availability).
+    announcement_date is the RAW SEC filing date. NOTE (2026-06): contrary to
+    what this docstring used to claim, _quarterly_series does NOT apply a +1
+    day availability shift (that shift happens in sector_model's feature
+    builder, not in _quarterly_series itself). Consumers must therefore treat
+    ann_date as not-yet-tradable on the day itself — run.py requires
+    ann_date < rebalance_date.
     """
     eps = _quarterly_series(facts, _EPS_TAGS, unit="USD/shares")
     if eps.empty or len(eps) < _MIN_HISTORY:
@@ -64,18 +68,38 @@ def build_events(
     tickers: List[str],
     cache_dir: Optional[str] = None,
     cik_map: Optional[Dict[str, str]] = None,
+    end_date: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Build the full earnings-events table across all tickers.
     Returns DataFrame with columns [ticker, ann_date, eps, sue].
+
+    `end_date` (the backtest's requested coverage) triggers a STALENESS CHECK
+    (2026-06), the PEAD counterpart to the factor-fundamentals guard: EDGAR
+    returns all available history, but this table is cached unconditionally,
+    so a cache built against an older end_date would silently omit newer
+    earnings and leave the OOS period (2025+) with no events to trade. If the
+    newest cached announcement is well behind the requested end_date, rebuild.
     """
     if cik_map is None:
         cik_map = fetch_cik_map(cache_dir)
 
     cache_path = Path(cache_dir) / "pead_events.parquet" if cache_dir else None
     if cache_path and cache_path.exists():
-        logger.info(f"Loading cached PEAD events from {cache_path}")
-        return pd.read_parquet(cache_path)
+        cached = pd.read_parquet(cache_path)
+        stale = False
+        if end_date is not None and len(cached):
+            last = pd.to_datetime(cached["ann_date"]).max()
+            # 90-day slack: the newest real filing always lags end_date a bit
+            # (and end_date may sit slightly in the future).
+            if last < pd.Timestamp(end_date) - pd.Timedelta(days=90):
+                logger.info(
+                    f"PEAD events cache stale (newest {last.date()} ≪ "
+                    f"{end_date}) — rebuilding from EDGAR")
+                stale = True
+        if not stale:
+            logger.info(f"Loading cached PEAD events from {cache_path}")
+            return cached
 
     rows = []
     n = len(tickers)

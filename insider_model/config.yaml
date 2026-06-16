@@ -1,0 +1,31 @@
+data:
+  start_date: "2015-01-01"
+  end_date:   "2024-12-31"
+  cache_dir:  "cache"
+  # Quarterly Form 345 data sets to pull (first quarter needed is start_date
+  # minus the signal window; one extra year of filings gives clean warmup).
+  form345_start_year: 2014
+
+backtest:
+  rebalance_freq:   20          # monthly — PEAD lesson: weekly churn ate the edge
+  warmup_days:      252
+  transaction_cost: 0.001
+  borrow_rate_annual: 0.003     # SPY borrow is general collateral (~30bp)
+  initial_capital:  1_000_000
+
+signal:
+  # v1 (2026-06): v0 averaged only 18 names (too narrow) with Sharpe ~0.1.
+  # Changes: wider window (63→126d), no $ floor (50k→0), routine-buyer filter
+  # (Cohen-Malloy-Pomorski 2012) so breadth comes from opportunistic buys only.
+  signal_window: 126            # trailing trading days (~6 months) of filings
+  min_buyers:    2              # cluster definition: >= 2 distinct insiders buying
+  min_value:     0              # no $ floor — breadth over size
+  max_names:     50             # cap the long book
+  officer_director_only: true   # drop 10%-owner-only filers (funds, not insiders)
+  drop_routine:  true           # drop same-calendar-month-3-years-running buyers
+
+portfolio:
+  hedge: "spy"                  # "spy" (market-neutral vs index) | "none" (long-only)
+  min_names: 10                 # skip rebalance if fewer qualifying names
+
+oos_start: null

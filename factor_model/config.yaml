@@ -1,12 +1,15 @@
 data:
   start_date: "2015-01-01"
-  end_date:   "2024-12-31"
+  end_date:   "2026-06-30"   # extended 2026-06 for TRUE out-of-sample eval:
+                             # everything before 2025-01-01 is the development
+                             # period; 2025+ data has never touched any config
   cache_dir:  "cache"
 
 backtest:
   rebalance_freq:   21        # monthly rebalancing (factors are slow-moving)
   warmup_days:      252       # need 1y of history for momentum + vol
   transaction_cost: 0.001     # 10 bps per unit turnover
+  borrow_rate_annual: 0.01    # short-borrow fee (added 2026-06, parity with PEAD)
   initial_capital:  1_000_000
 
 portfolio:

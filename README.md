@@ -1,5 +1,15 @@
 # Trading Model
 
+> **STATUS (2026-06): the PINN-RL model described below is RETIRED.** Its
+> results were lookahead artifacts — see [LOOKAHEAD_FINDING.md](LOOKAHEAD_FINDING.md).
+> After fixing the leaks it shows no edge (training Sharpe −1 to −3.8, no
+> learning trend). The repo's live work is the multi-strategy program:
+> `factor_model` + `earnings_model` combined via `combine_strategies.py`
+> (honest net Sharpe 0.87). Two sleeve-#3 candidates were built, tested, and
+> shelved on pre-set criteria: `insider_model` (Sharpe 0.13 / −0.01 across
+> two attempts) and `sector_rotation` (0.03). Negative results recorded in
+> their READMEs. Lessons in SURVIVORSHIP_FINDING.md and LOOKAHEAD_FINDING.md.
+
 A research-grade algorithmic trading system that combines physics-informed neural networks (PINNs), variational autoencoders, and deep reinforcement learning to generate portfolio allocation decisions across 50 US equities.
 
 ## What the model does

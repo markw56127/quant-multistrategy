@@ -1,0 +1,37 @@
+data:
+  start_date: "2014-01-01"     # one extra year so momentum has history at backtest start
+  end_date:   "2024-12-31"
+  cache_dir:  "cache"
+
+# Sector ETF universe — fixed, survivorship-free by construction.
+# XLRE inception 2015-10, XLC 2018-06: they enter once they have history.
+etfs:
+  Information Technology:  "XLK"
+  Financials:              "XLF"
+  Health Care:             "XLV"
+  Industrials:             "XLI"
+  Consumer Discretionary:  "XLY"
+  Consumer Staples:        "XLP"
+  Energy:                  "XLE"
+  Materials:               "XLB"
+  Utilities:               "XLU"
+  Real Estate:             "XLRE"
+  Communication Services:  "XLC"
+
+signal:
+  momentum_weight: 0.6         # inherited from sector_model Layer 1 — not re-fit
+  macro_weight:    0.4
+  momentum_lookback: 252       # 12-1 month momentum
+  momentum_skip:     21
+  macro_z_window:    252
+  n_side:            3         # long top-3 / short bottom-3 sectors
+  min_sectors:       8         # require at least this many scoreable sectors
+
+backtest:
+  rebalance_freq:   21         # monthly
+  warmup_days:      252
+  transaction_cost: 0.0005     # ETFs: ~1bp spreads + commission headroom
+  borrow_rate_annual: 0.003    # sector ETFs are general collateral
+  initial_capital:  1_000_000
+
+oos_start: null
