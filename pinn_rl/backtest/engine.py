@@ -103,6 +103,18 @@ class BacktestEngine:
         w_reindexed = w_reindexed.reindex(columns=tickers, fill_value=0.0)
 
         for i, date in enumerate(all_dates):
+            # Daily return accrues to the weights held COMING INTO this date.
+            # Weights committed at date t (using info through t's close) only
+            # start earning from t+1 — rebalancing happens at the close, below.
+            # (Fixed 2026-06: previously rebalanced before the day's return,
+            # crediting the new weights with a return already realized at the
+            # time the weights were decided — one-day lookahead.)
+            day_ret = float((cur_weights * self.returns.loc[date].values).sum())
+            cap    *= (1 + day_ret)
+            portfolio_values.append(cap)
+            daily_returns.append(day_ret)
+            weights_list.append(cur_weights.copy())
+
             if i % config.rebalance_freq == 0:
                 new_w = w_reindexed.loc[date].values.astype(np.float32)
                 # Clip to position limits
@@ -123,13 +135,6 @@ class BacktestEngine:
                     trade_rows.append({"date": date, "turnover": turnover, "cost": cost})
 
                 cur_weights = new_w
-
-            # Daily return
-            day_ret = float((cur_weights * self.returns.loc[date].values).sum())
-            cap    *= (1 + day_ret)
-            portfolio_values.append(cap)
-            daily_returns.append(day_ret)
-            weights_list.append(cur_weights.copy())
 
         pv = np.array(portfolio_values)
         r  = np.array(daily_returns)

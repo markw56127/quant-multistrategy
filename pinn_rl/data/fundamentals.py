@@ -83,7 +83,11 @@ class FundamentalsEngine:
         t = yf.Ticker(ticker)
 
         earnings_df = self._earnings_features(t, ticker, trading_days, price_returns)
-        static_df   = self._static_ratios(t, ticker, trading_days)
+        # LOOKAHEAD FIX (2026-06): _static_ratios broadcast TODAY's forwardEps /
+        # pegRatio (a current yfinance snapshot) across the entire historical
+        # window — e.g. 2026 analyst expectations visible to the model in 2015.
+        # yfinance has no point-in-time history for these, so they are dropped.
+        static_df = None
 
         frames = [f for f in [earnings_df, static_df] if f is not None]
         if not frames:
@@ -140,13 +144,22 @@ class FundamentalsEngine:
             # Year-over-year growth (4 quarters back)
             earn["eps_growth_yoy"] = earn["eps_actual"].pct_change(4).clip(-5, 5)
 
-            # Post-earnings 5-day return (uses actual future returns, so valid for TRAINING)
+            # Post-earnings 5-day return. LOOKAHEAD FIX (2026-06): this is the
+            # realized return over announcement+1 .. announcement+5, so it is
+            # only KNOWN at announcement+5. It used to be placed at
+            # announcement+1, leaking 5 days of future returns into the feature
+            # matrix. We now lag it by `horizon` extra business days so the
+            # feature represents "drift after the PREVIOUS announcement" by the
+            # time it becomes visible.
             if ticker in price_returns.columns:
-                earn["post_earn_ret_5d"] = self._post_earnings_return(
+                pead = self._post_earnings_return(
                     earn.index, price_returns[ticker], horizon=5
                 )
+                earn["post_earn_ret_5d"] = pead
+                self._pead_extra_lag = 5  # consumed below when shifting
             else:
                 earn["post_earn_ret_5d"] = 0.0
+                self._pead_extra_lag = 0
 
             # Shift to announcement + 1 business day (avoid lookahead)
             shifted_idx = self._shift_to_next_business_day(earn.index, trading_days)
@@ -156,6 +169,12 @@ class FundamentalsEngine:
 
             # Map onto daily trading calendar via forward-fill
             daily_df = earn_shifted.reindex(trading_days).ffill()
+
+            # Apply the extra availability lag to the realized-drift column so
+            # it never contains returns from the future relative to its row.
+            extra = getattr(self, "_pead_extra_lag", 0)
+            if extra > 0 and "post_earn_ret_5d" in daily_df.columns:
+                daily_df["post_earn_ret_5d"] = daily_df["post_earn_ret_5d"].shift(extra)
             daily_df.columns = [f"{ticker}_fund_{c}" for c in daily_df.columns]
             return daily_df
 

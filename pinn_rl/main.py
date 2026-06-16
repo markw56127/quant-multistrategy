@@ -43,7 +43,16 @@ def main():
 
     if args.mode == "train":
         from train import main as train_main
-        sys.argv = [sys.argv[0]] + remaining
+        # BUG FIX (2026-06): flags defined on BOTH parsers (--no-sentiment,
+        # --no-fundamentals, --config, --checkpoints) were consumed here and
+        # never forwarded to train.py, so e.g. `--no-sentiment` was silently
+        # ignored in train mode. Re-forward them explicitly.
+        forwarded = ["--config", args.config, "--checkpoints", args.checkpoints]
+        if args.no_sentiment:
+            forwarded.append("--no-sentiment")
+        if args.no_fundamentals:
+            forwarded.append("--no-fundamentals")
+        sys.argv = [sys.argv[0]] + forwarded + remaining
         train_main()
 
     elif args.mode == "infer":

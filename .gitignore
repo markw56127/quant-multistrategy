@@ -16,6 +16,10 @@ build/
 # Generated cache (market data cache, can be re-downloaded)
 cache/
 
+# Model checkpoints (binary weights, regenerable from training)
+checkpoints/
+checkpoints_fixed/
+
 # Logs
 logs/
 *.log

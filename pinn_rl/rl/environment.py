@@ -157,10 +157,15 @@ class TradingEnvironment(gym.Env):
         # Apply cost up-front
         self._portfolio_value *= (1.0 - cost)
 
-        # 2. Hold weights for rebalance_freq days, accumulate daily returns
+        # 2. Hold weights for rebalance_freq days, accumulate daily returns.
+        #    The decision at index t uses features computed from day t's close,
+        #    so the first return the position can earn is returns[t+1]
+        #    (close_t -> close_{t+1}). Earning returns[t] (close_{t-1} -> close_t)
+        #    would be lookahead: that return is already realized inside the
+        #    observation. (Fixed 2026-06: previously ranged over [t, t+freq).)
         end_step = min(self._step + self.rebalance_freq, self.T - 1)
         daily_returns: List[float] = []
-        for s in range(self._step, end_step):
+        for s in range(self._step + 1, end_step + 1):
             day_ret = float((self._weights * self.returns[s]).sum())
             self._portfolio_value *= (1.0 + day_ret)
             self._portfolio_history.append(self._portfolio_value)
