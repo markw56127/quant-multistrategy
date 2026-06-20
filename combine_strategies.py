@@ -27,9 +27,11 @@ ROOT = Path(__file__).resolve().parent
 STRATS = {
     "factor_vq": ROOT / "factor_model"   / "results" / "backtest.csv",
     "pead":      ROOT / "earnings_model" / "results" / "backtest.csv",
-    # Shelved sleeve-#3 candidates (2026-06), both ~zero standalone Sharpe:
-    #   "insider":    insider_model/results/backtest.csv   (two attempts, 0.13 / -0.01)
-    #   "sector_rot": sector_rotation/results/backtest.csv (0.03, vol 14.8%)
+    # Shelved candidate sleeves (all ~zero or negative standalone Sharpe):
+    #   "insider":    insider_model/results/backtest.csv    (two attempts, 0.13 / -0.01)
+    #   "sector_rot": sector_rotation/results/backtest.csv  (0.03, vol 14.8%)
+    #   "statarb":    statarb_model/results/backtest.csv    (-0.59 net, -0.30 GROSS:
+    #                 no mean-reversion edge in US large-cap; Do & Faff 2010)
     # See their READMEs. The book is the two real sleeves above until a
     # candidate clears standalone Sharpe >= ~0.3 with low correlation.
 }

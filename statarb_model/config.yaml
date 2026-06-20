@@ -1,0 +1,37 @@
+data:
+  start_date: "2015-01-01"
+  end_date:   "2026-06-30"   # same dev(<=2024)/OOS(2025+) split as every other sleeve
+  cache_dir:  "cache"        # pre-seeded from factor_model/cache (survivorship-free panel)
+
+universe:
+  # Pairs are formed WITHIN GICS sector only. Same-sector names share economic
+  # drivers, so a cointegrating relationship is plausible rather than spurious,
+  # and it cuts the candidate set from C(616,2)=190k to a tractable, defensible
+  # within-sector search. Sectors come from shared/universe_pit.fetch_sectors.
+  same_sector_only: true
+
+formation:
+  # Engle-Granger cointegration on a rolling FORMATION window, strictly before
+  # the trading window. Everything a pair "knows" (hedge ratio beta, OU mean mu,
+  # equilibrium sigma) is frozen at formation and never re-peeked while trading.
+  formation_days:    252     # 12-month lookback to select pairs and fit the OU
+  trading_days:      126     # 6-month out-of-sample trading window, then re-form
+  corr_prefilter:    0.80    # cheap gate before the costly ADF: min formation-window
+                             # correlation of log prices (kills most non-pairs fast)
+  adf_pvalue_max:    0.05    # Engle-Granger ADF p-value on the spread residual
+  half_life_min:     5       # days; faster than this is microstructure/noise
+  half_life_max:     63      # days; must mean-revert well inside the trading window
+  max_pairs:         20      # top pairs by ADF p-value carried into each window
+  min_price:         5.0     # avoid sub-$5 names (wide spreads, unreliable)
+
+backtest:
+  # OU / z-score trading rule on the FROZEN formation parameters.
+  entry_z:           2.0     # open when |z| crosses this (spread far from OU mean)
+  exit_z:            0.5     # close when |z| reverts inside this band
+  stop_z:            3.5     # hard stop: relationship likely broke, cut the pair
+  beta_neutral:      true    # leg weights 1/(1+b), -b/(1+b): gross 1, beta-neutral
+  transaction_cost:  0.001   # 10 bps per unit turnover (equities, both legs)
+  initial_capital:   1_000_000
+
+# Out-of-sample split (set via --oos-start CLI flag), mirrors the other sleeves.
+oos_start: null
