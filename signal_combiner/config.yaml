@@ -1,0 +1,32 @@
+# Bake-off reuses factor_model's cached inputs (prices, EDGAR fundamentals,
+# sectors) so it compares COMBINERS on identical features, not a new dataset.
+cache_dir: "../factor_model/cache"
+
+data:
+  start_date: "2015-01-01"
+  end_date:   "2026-06-30"
+
+backtest:
+  rebalance_freq: 21     # monthly, matches factor_model
+  warmup_days:    252
+
+bakeoff:
+  features: ["value", "momentum", "quality", "low_vol", "size"]
+  min_train_months: 36   # first test month needs 3y of history to train on
+  embargo_months:   1    # purge: drop the last train month so its (forward) label
+                         # cannot overlap the test month — prevents leakage
+  decile: 0.20          # long-short top/bottom 20% for the portfolio metric
+  winsor: 0.02          # clip target tails (per cross-section) before fitting
+  oos_start: "2025-01-01"
+
+  # XGBoost params chosen to give trees a FAIR but regularized shot on low-SNR
+  # financial data (shallow, subsampled, L2). The hypothesis under test is that
+  # this still does not beat a regularized linear model out-of-sample.
+  xgb:
+    n_estimators: 300
+    max_depth: 3
+    learning_rate: 0.03
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+    min_child_weight: 50
