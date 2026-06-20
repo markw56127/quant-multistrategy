@@ -1,0 +1,23 @@
+data:
+  start_date: "2015-01-01"
+  end_date:   "2026-06-30"   # same dev(<=2024)/OOS(2025+) split as the large-cap sleeve
+  cache_dir:  "cache"
+
+backtest:
+  rebalance_freq:    21       # monthly
+  warmup_days:       252      # 1y history for momentum + vol
+  transaction_cost:  0.0015   # 15 bps/turnover — small-caps have wider spreads than
+                              # large-caps (the factor sleeve uses 10 bps)
+  borrow_rate_annual: 0.03    # small-cap shorts are harder/costlier to borrow than
+                              # large-caps (factor sleeve uses 1%)
+  initial_capital:   1_000_000
+
+portfolio:
+  mode:     long_short        # market-neutral quintile spread
+  quantile: 0.20              # top/bottom 20%
+
+factors:
+  composite: ["value", "momentum", "quality", "low_vol", "size"]
+
+# Out-of-sample split (set via --oos-start CLI flag), mirrors factor_model.
+oos_start: null
