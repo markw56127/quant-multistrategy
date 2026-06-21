@@ -1,6 +1,13 @@
 # Earnings PEAD Model
 
-**Status:** v1 — survivorship-free, market-neutral, execution-honest (2026-06).
+**Status:** RETIRED on true OOS — survivorship-free, execution-honest (2026-06).
+
+> **TRUE-OOS UPDATE (2026-06):** the dev-period drift below (Sharpe ~0.3–0.5,
+> 2016–2024) **collapsed to −0.69 on true out-of-sample data (2025–2026)**, and is
+> still accelerating downward (−1.89 in 2026 YTD). This is textbook crowding decay of
+> a heavily-published anomaly — PEAD is now a drag, not a diversifier, and is dropped
+> from the book. See [../OOS_FINDING.md](../OOS_FINDING.md). Numbers below are the
+> development period, retained for the methodology and the lookahead post-mortem.
 
 ## Results (v1, 2016-2024, monthly rebalance, NET of costs + borrow)
 

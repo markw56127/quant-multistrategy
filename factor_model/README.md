@@ -1,6 +1,13 @@
 # Multi-Factor Equity Model
 
-**Status:** v0 BUILT — value+quality composite, survivorship-corrected.
+**Status:** BUILT — value+quality composite, survivorship-corrected.
+
+> **TRUE-OOS UPDATE (2026-06):** the dev-period (2016–2024) Sharpe 0.61 below
+> **degraded to +0.25 on true out-of-sample data (2025–2026)** — real but marginal,
+> within one standard error of its dev value. The two-sleeve book that combined this
+> with PEAD fell from dev 0.75 to ~0 OOS. See [../OOS_FINDING.md](../OOS_FINDING.md).
+> The Fama-MacBeth confirmation (value premium t≈3, full sample) is in
+> [../factor_research/](../factor_research/). Numbers below are the development period.
 
 ## Results (v0, survivorship-free, 2016-2024, long-short market-neutral)
 
