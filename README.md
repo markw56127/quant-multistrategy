@@ -1,172 +1,115 @@
-# Trading Model
+# Multi-Strategy Equity Research System
 
-> **STATUS (2026-06): the PINN-RL model described below is RETIRED.** Its
-> results were lookahead artifacts — see [LOOKAHEAD_FINDING.md](LOOKAHEAD_FINDING.md).
-> After fixing the leaks it shows no edge (training Sharpe −1 to −3.8, no
-> learning trend). The repo's live work is the multi-strategy program:
-> `factor_model` + `earnings_model` combined via `combine_strategies.py`
-> (honest net Sharpe 0.87). Two sleeve-#3 candidates were built, tested, and
-> shelved on pre-set criteria: `insider_model` (Sharpe 0.13 / −0.01 across
-> two attempts) and `sector_rotation` (0.03). Negative results recorded in
-> their READMEs. Lessons in SURVIVORSHIP_FINDING.md and LOOKAHEAD_FINDING.md.
+A survivorship-free, lookahead-audited research platform for cross-sectional and
+cross-asset systematic strategies on US equities and futures. The defining feature
+of this repo is not a winning strategy — it is **rigor**: every sleeve is tested on
+a point-in-time universe with realistic costs, validated on data the model never
+saw, and **retired with evidence when it fails**. Most of what follows is honest
+negative results, written up alongside the one edge that survived.
 
-A research-grade algorithmic trading system that combines physics-informed neural networks (PINNs), variational autoencoders, and deep reinforcement learning to generate portfolio allocation decisions across 50 US equities.
+> **What a reviewer should take from this repo:** the hard part of quant research is
+> not building models — it is not fooling yourself. This project demonstrates the
+> discipline that prevents it (survivorship correction, lookahead audits, true
+> out-of-sample tests, purged/embargoed cross-validation) and applies it ruthlessly,
+> including to its own ideas.
 
-## What the model does
+## Scoreboard (honest, true out-of-sample where applicable)
 
-The system treats the latent representation of the market as a probability distribution evolving through time according to a Fokker-Planck partial differential equation. Rather than predicting prices directly, it models the *density* of possible market states and uses that uncertainty to inform portfolio decisions. A Soft Actor-Critic (SAC) reinforcement learning agent then learns to allocate capital by maximizing risk-adjusted returns, using the PINN's output — including physics-grounded uncertainty estimates — as part of its state observation.
+| Sleeve | Method | Result | Status |
+|---|---|---|---|
+| **`trend_model`** | Cross-asset time-series momentum (futures) | dev Sharpe **0.61 → OOS 0.38** | **survived OOS** — only one |
+| `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev ~0.6 → **OOS +0.25** | marginal, degraded |
+| `earnings_model` | PEAD / earnings-surprise drift | **OOS Sharpe −0.69** | dead (crowding decay) |
+| `statarb_model` | OU-process pairs (cointegration) | **−0.30 gross** | dead (no edge in large-cap) |
+| `smallcap_factor` | Same factor engine, S&P 600 | apparent IC t=3.3 was **survivorship** | unsupported (artifact) |
+| `insider_model` | Form-4 insider buying | Sharpe 0.13 / −0.01 | dead |
+| `sector_rotation` | Cross-sector momentum | Sharpe 0.03 | dead |
+| `pinn_rl` | Physics-informed RL (Fokker-Planck + SAC) | lookahead artifact | **retired** |
 
-**Training pipeline (6 stages):**
+Analysis layers: **`factor_research`** (Fama-MacBeth premia, IC decay, turnover &
+capacity) and **`signal_combiner`** (ridge vs XGBoost under purged/embargoed CV).
 
-1. **Data** — downloads 10 years of daily OHLCV data for 50 stocks across 5 sectors, computes ~35 technical indicators per ticker, and optionally enriches with LLM-based news sentiment via the Claude API
-2. **Factor discovery** — sector-level PCA extracts 12 eigen-factors, then a β-VAE compresses all features into a 16-dimensional latent representation with explicit uncertainty estimates
-3. **PINN training** — a physics-informed network is trained to satisfy the Fokker-Planck equation on the latent trajectories, with boundary conditions, initial conditions, and sentiment as a drift modifier
-4. **RL training** — a SAC agent is trained in a custom Gymnasium environment that uses real historical returns, PINN uncertainty, and transaction costs
-5. **Backtesting** — the learned policy and a Lagrangian-constrained portfolio optimizer are evaluated in parallel against SPY
-6. **Risk analysis** — Monte Carlo simulation (50,000 paths), Value-at-Risk, Sharpe/Sortino ratios, and confidence bands
+## The methodology (what makes the results trustworthy)
 
-## Why this model is interesting
+- **Survivorship-free, point-in-time universe** — `shared/universe_pit.py`
+  reconstructs S&P 500 membership *as of each date* and keeps delisted names with
+  partial history. Correcting this alone turned a spurious size factor from +187%
+  (Sharpe 1.44) to a literature-consistent +23% (0.26). See
+  [SURVIVORSHIP_FINDING.md](SURVIVORSHIP_FINDING.md).
+- **Lookahead discipline** — signals read only data available at the decision time;
+  vols and weights use strictly-prior windows. A lookahead audit retired the entire
+  PINN-RL sleeve. See [LOOKAHEAD_FINDING.md](LOOKAHEAD_FINDING.md).
+- **True out-of-sample** — every config runs through 2026-06; the 2025+ window was
+  never seen during development. `oos_report.py` splits dev vs OOS per sleeve. This
+  is where the two-sleeve book that looked like Sharpe 0.75 revealed itself as ~0.
+  See [OOS_FINDING.md](OOS_FINDING.md).
+- **Purged + embargoed walk-forward CV** — `signal_combiner` (López de Prado) so a
+  training label's forward return cannot overlap the test month.
+- **Realistic frictions** — transaction costs, slippage, borrow fees on shorts, and
+  (for futures) roll-gap defenses are modeled throughout.
 
-**Novel combination:** Most quant models pick one of these approaches. This one uses the PINN as a *physics prior* that regularizes the latent space learned by the VAE, and then feeds that physics-grounded representation to the RL agent. The Fokker-Planck framing naturally gives a probability distribution over future states rather than a point forecast.
+## Highlights
 
-**Uncertainty as a first-class input:** The VAE produces per-timestep uncertainty estimates for each latent factor. The RL agent observes these uncertainties directly, so it can learn to be more conservative when the market is in an uncharted region of latent space.
+**The one edge that survived (`trend_model`).** Cross-asset time-series momentum is
+the anomaly with a century of out-of-sample support. The premium localizes to
+equity-index and rates futures (decided on development data only); the dev-selected
+book held **0.61 → 0.38** out of sample — the first positive true-OOS result in the
+repo. [TREND_FINDING.md](TREND_FINDING.md).
 
-**Sentiment as drift:** News sentiment (scored by Claude claude-sonnet-4-6 or FinBERT) is injected directly into the Fokker-Planck drift term, giving the physics model a principled way to incorporate non-price information.
+**Catching a fake edge (`smallcap_factor`).** Running the identical factor engine on
+small-caps produced a *highly significant* cross-sectional IC (t = 3.35). It was
+fake: dropping the `size` factor collapsed IC to t = 0.32, because current-constituent
+small-caps condition on survival and `size` returned a survivorship-driven +3,566%.
+The same toolkit that found a real value premium (Fama-MacBeth t ≈ 3 in
+`factor_research`) exposed the illusion — that contrast is the point.
 
-**Sensitivity analysis:** The indicator families (trend, momentum, volatility, volume, structure) can be systematically zeroed out to measure each family's contribution to PINN predictive power and RL reward.
+**ML done honestly (`signal_combiner`).** A linear-vs-XGBoost bake-off under
+purged/embargoed CV: XGBoost does **not** beat a regularized linear model, and
+learned combiners are regime-fragile vs. the naive composite. At equity-factor
+signal-to-noise, the simplest combiner wins — demonstrated, not asserted.
+
+**The statistical layer (`factor_research`).** Fama-MacBeth factor premia with
+Newey-West t-stats (value is the lone robust premium), IC-decay profiles, turnover /
+transaction-cost breakeven (>50 bps), and square-root market-impact capacity
+analysis (~$5B AUM before Sharpe halves). The evaluation a desk runs before sizing.
+
+## Repository layout
+
+```
+shared/universe_pit.py     Point-in-time, survivorship-free universe + prices
+factor_model/              Cross-sectional value/quality/momentum/low-vol/size
+earnings_model/            PEAD earnings-drift sleeve
+trend_model/               Cross-asset time-series momentum (futures)  ← OOS survivor
+statarb_model/             OU-process statistical-arbitrage (pairs)
+smallcap_factor/           Factor engine on S&P 600 (survivorship case study)
+insider_model/             Form-4 insider-buying sleeve
+sector_rotation/           Cross-sector momentum sleeve
+signal_combiner/           Ridge vs XGBoost combiner, purged/embargoed CV
+factor_research/           Fama-MacBeth, IC decay, turnover & capacity analysis
+pinn_rl/                   Physics-informed RL sleeve (RETIRED — lookahead)
+combine_strategies.py      Risk-parity multi-sleeve combiner
+oos_report.py              Development vs true-OOS report per sleeve
+
+*_FINDING.md               Write-ups: survivorship, lookahead, OOS, trend
+*/README.md                Per-sleeve methodology, results, and caveats
+```
 
 ## Setup
 
-### Environment
-
 ```bash
-# Create and activate the conda environment
-mamba create -n trading-model python=3.11 -y
-mamba activate trading-model
-
-# Install PyMC (complex deps — best via conda-forge)
-mamba install -c conda-forge "pymc" "pandas-ta=0.3.14b" -y
-
-# Install PyTorch (Apple Silicon MPS support)
-pip install torch torchvision
-
-# Downgrade numpy for pandas-ta compatibility
-pip install "numpy<2"
-
-# Install remaining dependencies
-pip install scikit-learn yfinance requests newsapi-python anthropic \
-  "transformers>=4.36.0" "gymnasium>=0.29.0" "stable-baselines3>=2.2.0" \
-  plotly seaborn dash pyyaml tqdm joblib python-dotenv loguru
+mamba create -n trading-model python=3.11 -y && mamba activate trading-model
+pip install -r requirements.txt
 ```
 
-### API keys
+Most sleeves run standalone from their own directory (`cd factor_model && python run.py`),
+optionally with `--oos-start 2025-01-01` for the out-of-sample-only view. The
+point-in-time price/fundamentals caches are shared and reused across sleeves.
 
-```bash
-cp .env.example .env
-# Edit .env and fill in:
-#   ANTHROPIC_API_KEY  — required for Claude-based sentiment scoring
-#   NEWSAPI_KEY        — optional, for real-time news
-#   POLYGON_API_KEY    — optional, for higher-quality market data
-```
+## A note on the PINN-RL sleeve
 
-## How to run
-
-### Full training pipeline
-
-```bash
-mamba activate trading-model
-python main.py --mode train
-```
-
-This runs all 6 stages end-to-end (~hours, depending on hardware and whether sentiment is enabled). Checkpoints are saved to `checkpoints/`.
-
-**Common flags:**
-
-| Flag | Effect |
-|------|--------|
-| `--no-sentiment` | Skip LLM sentiment (much faster) |
-| `--skip-features` | Load pretrained PCA + VAE from `checkpoints/` |
-| `--skip-pinn` | Load pretrained PINN from `checkpoints/pinn.pt` |
-| `--skip-rl` | Load pretrained SAC agent from `checkpoints/sac_agent.pt` |
-| `--epochs-pinn N` | Override PINN training epochs (default 5000) |
-| `--epochs-rl N` | Override RL episodes (default 200) |
-| `--dashboard` | Launch the Dash dashboard after training |
-
-### Quick run (example case — fastest path)
-
-To skip the slow training stages and test the pipeline end-to-end on cached data:
-
-```bash
-# First run: pull data and train everything, skip sentiment
-python main.py --mode train --no-sentiment --epochs-pinn 500 --epochs-rl 20
-
-# Subsequent runs: everything loaded from checkpoints, no retraining
-python main.py --mode train --skip-data --skip-features --skip-pinn --skip-rl --no-sentiment
-```
-
-Checkpoints saved after the first full run:
-
-| File | Contents |
-|------|----------|
-| `checkpoints/pca.pkl` | PCA + Factor Analysis + scalers |
-| `checkpoints/vae.pt` | VAE weights + normalization stats |
-| `checkpoints/pinn.pt` | PINN density/drift/diffusion networks |
-| `checkpoints/sac_agent.pt` | SAC actor, critic, target networks |
-
-### Other modes
-
-```bash
-# Generate today's signals using pretrained models
-python main.py --mode infer
-
-# Backtest only (uses checkpointed policy weights)
-python main.py --mode backtest
-
-# Launch the interactive Dash dashboard
-python main.py --mode dashboard
-
-# Indicator sensitivity analysis (measures per-family impact)
-python main.py --mode sensitivity
-```
-
-## Configuration
-
-All hyperparameters are in [config/config.yaml](config/config.yaml):
-
-- `data.tickers` — universe of 50 stocks across 5 sectors
-- `pde.diffusion_coeff` — controls how quickly the probability density spreads in latent space
-- `pde.chaos_sensitivity` — Lyapunov-like sensitivity coefficient for market chaos
-- `pinn.*` — network architecture and physics loss weights
-- `rl.*` — SAC hyperparameters (learning rate, entropy coefficient, buffer size)
-- `backtest.*` — transaction costs, slippage, position limits, rebalance frequency
-
-## Project structure
-
-```
-├── config/config.yaml          # all hyperparameters
-├── data/
-│   ├── ingestion.py            # yfinance downloader
-│   ├── technical_indicators.py # 35 indicators across 5 families
-│   ├── sentiment.py            # Claude / FinBERT sentiment scoring
-│   └── pipeline.py             # orchestrates data stages
-├── features/
-│   ├── pca_factors.py          # sector PCA + global factor extraction
-│   └── autoencoder.py          # β-VAE with uncertainty estimation
-├── physics/
-│   ├── pde_system.py           # Fokker-Planck PDE specification
-│   └── pinn.py                 # physics-informed neural network solver
-├── rl/
-│   ├── environment.py          # custom Gymnasium trading env
-│   └── sac_agent.py            # Soft Actor-Critic implementation
-├── optimization/
-│   └── estimators.py           # Lagrangian portfolio optimizer
-├── risk/
-│   ├── metrics.py              # Sharpe, Sortino, VaR, CVaR
-│   └── monte_carlo.py          # GBM path simulation
-├── backtest/
-│   └── engine.py               # parallel backtest runner
-├── visualization/
-│   └── dashboard.py            # Plotly Dash dashboard
-├── train.py                    # 6-stage training orchestrator
-└── main.py                     # CLI entry point
-```
+The repo began as a physics-informed RL system (Fokker-Planck latent density → Soft
+Actor-Critic sizer). Its early results were **lookahead artifacts**; after the leaks
+were fixed it shows no edge, and it is retired (`pinn_rl/`,
+[LOOKAHEAD_FINDING.md](LOOKAHEAD_FINDING.md)). It remains in the repo as the first
+case study in the discipline that defines the rest of the work: a model is only as
+real as the test that tried to break it.
