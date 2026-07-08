@@ -1,6 +1,41 @@
 # Sector Rotation Sleeve (long-short sector ETFs)
 
-**Status:** SHELVED (2026-06) — v0 failed the pre-set bar; recorded below.
+**Status:** DEAD (2026-07) — v0 failed its first true-OOS test (Sharpe −0.67),
+and three pre-registered reformulations each failed their pre-set bars.
+Recorded below; do not iterate further on this universe.
+
+## Reformulation experiments (2026-07, `experiments_v1.py`)
+
+To answer "is the construction the problem, or the idea?", four runs were
+pre-registered — variants and pass bars fixed before running, one run each,
+no iteration (insider_model precedent). Data extended through 2026-06;
+dev = 2015-2024, OOS = 2025+ (never seen during development).
+
+| Variant | Bar (pre-set) | dev | OOS | Verdict |
+|---|---|---|---|---|
+| v0 blend, first true-OOS run | OOS Sharpe > 0 | +0.13 | **−0.67** | **FAIL** |
+| v1 vol-adjusted momentum, macro dropped | dev ≥ 0.3 AND OOS > 0 | −0.21 | −1.15 | FAIL |
+| v2 per-sector TSMOM (sign of own 12-1, inv-vol) | dev ≥ 0.3 AND OOS > 0 AND corr(trend) < 0.6 | 0.27 | +0.83 | FAIL (dev 0.27 < 0.3) |
+| v3 dual momentum (long-only top-3, cash gate) | beat SPY Sharpe in dev AND OOS | 0.80 vs SPY 0.94 | 1.17 vs 1.14 | FAIL (dev) |
+
+Reading, honestly:
+- **v0's OOS failure (−0.67) is the decisive result** — same pattern as PEAD:
+  a marginal dev signal that inverts out of sample.
+- **Cross-sectional sector momentum is dead, not mis-constructed.** Vol-adjusting
+  the rank (v1) made it *worse*. The rank IC underneath is t ≈ 0.7 over 120
+  months — there is no portfolio construction that rescues a zero IC.
+- **v2 is the only near-miss**, and it is not a new edge: it is time-series
+  momentum expressed on sector ETFs (dev corr to `trend_model` 0.42, OOS
+  corr(SPY) 0.82 — mostly long-beta in the OOS window). The repo already
+  harvests that premium in `trend_model` with better instruments. Its OOS
+  strength *confirms* TREND_FINDING; it does not justify a redundant sleeve.
+- **v3 confirms long-only rotation is beta**: it never beat buy-and-hold SPY
+  in development (0.80 vs 0.94, corr 0.74+). The "switch into the winning
+  sector" story, implemented long-only, collects market return minus costs.
+
+Numbers drift slightly vs. the v0 record below (fresh yfinance adjusted
+closes, window now includes 2015 and 2025-26); conclusions are unchanged.
+Per-variant series: `results/experiment_<variant>.csv`.
 
 ## v0 result (2016-2024, monthly grid, net)
 
