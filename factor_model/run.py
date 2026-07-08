@@ -42,7 +42,9 @@ from universe_pit import (  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
-from construction import long_short_weights, long_only_weights, turnover  # noqa: E402
+from construction import (  # noqa: E402
+    long_short_weights, long_only_weights, buffered_long_short_weights, turnover,
+)
 
 
 def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFrame:
@@ -121,6 +123,9 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
     prev_w    = pd.Series(dtype=float)
     records   = []
     weight_fn = long_short_weights if mode == "long_short" else long_only_weights
+    buffer_mult = pf.get("buffer_mult")   # e.g. 2.0 → hold band = 2x entry band
+    if buffer_mult and mode == "long_short":
+        logger.info(f"Buffered membership: entry {quantile:.0%}, hold {quantile*buffer_mult:.0%}")
 
     for i, rd in enumerate(rebal_dates):
         # Point-in-time members on this date
@@ -136,7 +141,11 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
         if scores.empty:
             continue
 
-        w = weight_fn(scores["composite"], quantile=quantile)
+        if buffer_mult and mode == "long_short":
+            w = buffered_long_short_weights(
+                scores["composite"], prev_w, quantile=quantile, buffer_mult=buffer_mult)
+        else:
+            w = weight_fn(scores["composite"], quantile=quantile)
         if w.empty:
             continue
 
@@ -214,6 +223,8 @@ if __name__ == "__main__":
     p.add_argument("--config", default="config.yaml")
     p.add_argument("--mode", choices=["long_short", "long_only"], default=None)
     p.add_argument("--oos-start", default=None)
+    p.add_argument("--buffer-mult", type=float, default=None,
+                   help="hold-band multiple for buffered membership (e.g. 2.0)")
     p.add_argument("--out", default="results/backtest.csv")
     args = p.parse_args()
 
@@ -222,6 +233,10 @@ if __name__ == "__main__":
 
     if args.mode:
         cfg["portfolio"]["mode"] = args.mode
+    if args.buffer_mult:
+        cfg["portfolio"]["buffer_mult"] = args.buffer_mult
+        if args.out == "results/backtest.csv":
+            args.out = "results/backtest_buffered.csv"
     out = args.out
     if args.oos_start:
         cfg["oos_start"] = args.oos_start

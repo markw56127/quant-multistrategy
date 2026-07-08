@@ -9,6 +9,24 @@
 > The Fama-MacBeth confirmation (value premium t≈3, full sample) is in
 > [../factor_research/](../factor_research/). Numbers below are the development period.
 
+## Turnover-buffer experiment (2026-07): tested, NOT adopted
+
+A pre-registered buffered-membership rule (enter top/bottom 20%, hold until
+leaving 40% — the standard 2x buffer convention; adopt only if turnover falls
+≥ 25% and neither dev nor OOS net Sharpe degrades > 0.05) **failed on the dev
+leg**: turnover −54% (0.33 → 0.15/mo) but dev net Sharpe 0.72 → 0.51. The
+gross comparison (0.86 → 0.80) shows the cause is **signal dilution, not
+costs** — the buffer holds ~116 names/side instead of 88, and the extras are
+the weaker-ranked ones. At 10 bps costs the drag saved (~0.2%/yr) is smaller
+than the dilution. OOS improved (0.29 → 0.94) but 18 months is noise, and
+adopting on that basis is the cherry-pick the rule exists to prevent.
+
+Verdict: the canonical book stays unbuffered. The implementation remains
+available (`portfolio.buffer_mult` / `--buffer-mult 2.0`,
+`construction.buffered_long_short_weights`) because the trade-off reverses at
+institutional cost assumptions (≥ ~50 bps, cf. `../factor_research` breakeven).
+Comparison artifact: `results/backtest_buffered.csv`.
+
 ## Results (v0, survivorship-free, 2016-2024, long-short market-neutral)
 
 | Composite | Total | Sharpe | Max DD | Notes |

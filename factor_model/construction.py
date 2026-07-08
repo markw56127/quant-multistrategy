@@ -61,6 +61,52 @@ def long_only_weights(
     return w
 
 
+def buffered_long_short_weights(
+    scores: pd.Series,
+    prev_w: pd.Series,
+    quantile: float = 0.20,
+    buffer_mult: float = 2.0,
+) -> pd.Series:
+    """
+    Long-short quintile spread with a hold buffer (turnover reduction).
+
+    Entry band is the plain top/bottom `quantile`; a name already held stays
+    in the book until it leaves the wider top/bottom `quantile * buffer_mult`
+    band (2x is the standard practitioner convention, cf. MSCI index buffer
+    zones). This trades away the churn of names oscillating around the
+    quantile boundary while keeping the same signal. Each side is normalized
+    to gross 1.0, so the book stays dollar-neutral.
+
+    Requires quantile * buffer_mult <= 0.5 so the two hold bands cannot overlap.
+    """
+    s = scores.dropna()
+    if len(s) < 10:
+        return pd.Series(dtype=float)
+    if quantile * buffer_mult > 0.5:
+        raise ValueError("quantile * buffer_mult must be <= 0.5 (bands would overlap)")
+
+    n_entry = max(1, int(len(s) * quantile))
+    n_hold  = max(1, int(len(s) * quantile * buffer_mult))
+    ranked  = s.sort_values(ascending=False)
+
+    top_entry = set(ranked.index[:n_entry])
+    top_hold  = set(ranked.index[:n_hold])
+    bot_entry = set(ranked.index[-n_entry:])
+    bot_hold  = set(ranked.index[-n_hold:])
+
+    # Names that left the scoreable universe drop out automatically (& s.index)
+    prev_longs  = set(prev_w[prev_w > 0].index) & set(s.index)
+    prev_shorts = set(prev_w[prev_w < 0].index) & set(s.index)
+
+    longs  = top_entry | (prev_longs & top_hold)
+    shorts = bot_entry | (prev_shorts & bot_hold)
+
+    w = pd.Series(0.0, index=s.index)
+    w[list(longs)]  = +1.0 / len(longs)
+    w[list(shorts)] = -1.0 / len(shorts)
+    return w
+
+
 def turnover(prev: pd.Series, new: pd.Series) -> float:
     """One-sided turnover between two weight vectors."""
     all_idx = prev.index.union(new.index)
