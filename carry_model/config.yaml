@@ -1,0 +1,40 @@
+data:
+  start_date: "2015-01-01"
+  end_date:   "2026-06-30"     # same dev(<=2024)/OOS(2025+) split as other sleeves
+  cache_dir:  "cache"
+  futures_cache_dir: "../trend_model/cache"   # reuse the trend sleeve's price cache
+
+# Same dev-selected universe as trend_model (equity-index + rates futures).
+# Each instrument is mapped to the auxiliary series its carry is computed from:
+#   equities: tracking ETF (trailing-12m distribution yield = dividend leg)
+#   rates:    FRED constant-maturity yield at the contract's tenor
+universe:
+  equities:
+    "ES=F":  "SPY"
+    "NQ=F":  "QQQ"
+    "YM=F":  "DIA"
+    "RTY=F": "IWM"
+  rates:
+    "ZT=F":  "DGS2"
+    "ZF=F":  "DGS5"
+    "ZN=F":  "DGS10"
+    "ZB=F":  "DGS30"
+
+signal:
+  financing_series: "DGS3MO"   # 3m T-bill = the financing leg for both carry types
+
+# Portfolio construction inherited from trend_model VERBATIM — nothing re-fit.
+backtest:
+  rebalance_freq:    21
+  warmup_days:       252
+  vol_window:        60
+  return_clip:       0.15
+  inst_vol_floor:    0.06
+  max_inst_weight:   0.25
+  inst_vol_target:   0.10
+  port_vol_target:   0.12
+  max_leverage:      3.0
+  transaction_cost:  0.0005
+  initial_capital:   1_000_000
+
+oos_start: null
