@@ -82,16 +82,30 @@ def run_trend_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Dat
 
     tickers = [t for group in u.values() for t in group]
     logger.info("═══ Stage 1: Fetch cross-asset futures ═══")
-    prices = fetch_futures(tickers, d["start_date"], d["end_date"], cache)
-    # Subset to the configured universe (cache may hold a wider set of instruments)
-    keep = [t for t in tickers if t in prices.columns]
-    prices = prices[keep]
-    logger.info(f"Active universe: {len(keep)} instruments — {keep}")
     clip = bt["return_clip"]
-    # Roll-gap defense: a front-month continuous roll injects a one-day "return"
-    # that was never tradeable. Clip daily returns so these artifacts enter
-    # NEITHER the vol estimate NOR realized P&L. (Documented in README/config.)
-    rets = prices.pct_change().clip(-clip, clip)
+    ba_file = d.get("backadjusted_returns")
+    if ba_file and Path(ba_file).exists():
+        # Clean per-contract data (fetch_databento.py → build_backadjusted.py):
+        # tradeable daily returns with roll gaps already removed. Signals run on
+        # the compounded index; the clip is kept but should never bind here.
+        logger.info(f"Using back-adjusted returns from {ba_file}")
+        rets = pd.read_parquet(ba_file).clip(-clip, clip)
+        rets = rets[[t for t in tickers if t in rets.columns]]
+        prices = 100.0 * (1.0 + rets.fillna(0.0)).cumprod()
+        prices = prices.where(rets.notna().cummax())   # NaN before first data
+    else:
+        if ba_file:
+            logger.warning(f"{ba_file} not found — falling back to yfinance '=F' series")
+        prices = fetch_futures(tickers, d["start_date"], d["end_date"], cache)
+        # Subset to the configured universe (cache may hold a wider set)
+        prices = prices[[t for t in tickers if t in prices.columns]]
+        # Roll-gap defense: a front-month continuous roll injects a one-day
+        # "return" that was never tradeable. Clip daily returns so these
+        # artifacts enter NEITHER the vol estimate NOR realized P&L. Note the
+        # 2026-07 finding: the clip only catches monster gaps — normal-sized
+        # roll drift passes through (see TREND_FINDING.md addendum).
+        rets = prices.pct_change().clip(-clip, clip)
+    logger.info(f"Active universe: {prices.shape[1]} instruments — {list(prices.columns)}")
     dates = prices.index
 
     lookbacks   = cfg["signal"]["lookbacks_days"]

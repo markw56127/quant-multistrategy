@@ -6,6 +6,39 @@
 +0.61 → OOS (2025+) Sharpe +0.38**, the first positive true-OOS result in the
 project. But read the caveats — 18 months and a concentrated source.
 
+> ## ADDENDUM (2026-07): roll-free replication does NOT confirm the OOS number
+>
+> The known data caveat ("=F series are not back-adjusted") was tested instead
+> of just disclosed. `trend_model/validate_etf_proxy.py` reruns the IDENTICAL
+> construction on roll-free total-return ETF proxies (SPY/QQQ/DIA/IWM,
+> SHY/IEI/IEF/TLT) in excess-of-cash terms — same signal, sizing, vol target,
+> costs. Result (monthly corr between books +0.77):
+>
+> | book | DEV | OOS |
+> |---|---|---|
+> | futures =F (as reported below) | +0.61 | +0.38 |
+> | ETF proxy, roll-free | **+0.31** | **−0.19** |
+> | futures signal / ETF P&L | +0.86 | +0.14 |
+> | ETF signal / futures P&L | +0.33 | +0.03 |
+>
+> Reading: the **dev-period trend premium survives the data change** (positive
+> in all four signal/P&L combinations, 0.31–0.86), but the **OOS survival does
+> not** — it spans −0.19 to +0.38 depending purely on data source. Per-instrument
+> drift between =F and clean excess returns runs to **+1.7%/yr (NQ)**; the ±15%
+> clip never catches normal-sized roll gaps, so they flow into both signal and
+> P&L. Equity trend remains the stronger leg in both sources (futures eq-only
+> +0.50 dev / +0.49 OOS; ETF eq-only +0.26 / −0.14); rates trend is negative OOS
+> in both.
+>
+> **Status downgrade: "survived OOS" → "dev-robust, OOS unresolved."** The
+> honest statement is now: dev Sharpe 0.3–0.6 and OOS somewhere in [−0.2, +0.4],
+> with the true value unknowable on free data. Resolution requires genuinely
+> back-adjusted futures series (Norgate/CSI-class, paid) — free sources
+> (Quandl CHRIS, etc.) are discontinued. Until then this sleeve is a tracked
+> paper sleeve with a data asterisk, not a deployable edge. The original
+> write-up below is retained unchanged as the record of what was believed
+> on 2026-06-15 and why.
+
 ## Why we built it
 
 Every prior strategy fished US large-cap equities, the most efficient pond on

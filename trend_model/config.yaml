@@ -2,6 +2,10 @@ data:
   start_date: "2015-01-01"
   end_date:   "2026-06-30"   # same dev(<=2024)/OOS(2025+) split as the equity sleeves
   cache_dir:  "cache"
+  # Clean-data path (resolves the TREND_FINDING 2026-07 addendum): buy daily
+  # contract bars via fetch_databento.py, stitch with build_backadjusted.py,
+  # then uncomment. Falls back to yfinance "=F" while absent.
+  # backadjusted_returns: "cache/backadjusted_returns.parquet"
 
 universe:
   # DEV-SELECTED universe (see TREND_FINDING.md). We tested all six asset
