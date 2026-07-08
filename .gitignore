@@ -16,6 +16,10 @@ build/
 # Generated cache (market data cache, can be re-downloaded)
 cache/
 
+# Options-chain snapshots: valuable but NOT regenerable — ~1.8MB/day is too
+# heavy for git; back this directory up separately (see options_data/README.md)
+options_data/snapshots/
+
 # Model checkpoints (binary weights, regenerable from training)
 checkpoints/
 checkpoints_fixed/

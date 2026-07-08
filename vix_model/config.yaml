@@ -1,0 +1,29 @@
+data:
+  start_date: "2018-06-01"    # warmup only; backtest starts at backtest.start
+  end_date:   "2026-06-30"
+  cache_dir:  "cache"
+
+# Signal indices and tradeable ETPs. VXX (series B) exists from 2018-01;
+# SVXY deleveraged -1x -> -0.5x on 2018-02-27. The dev window below starts
+# 2019-01 so BOTH instruments are in their current form throughout — no
+# structural break inside the backtest.
+tickers:
+  vix:      "^VIX"
+  vix3m:    "^VIX3M"
+  short_vol: "SVXY"           # held in contango (VIX < VIX3M)
+  long_vol:  "VXX"            # held in backwardation (VIX >= VIX3M)
+  benchmark: "SPY"
+
+signal:
+  ratio_threshold: 1.0        # VIX/VIX3M; the theory value, not fitted
+
+backtest:
+  start:            "2019-01-01"
+  rebalance_freq:   5         # weekly — vol regimes move too fast for monthly
+  vol_window:       60
+  vol_target:       0.12      # book vol budget, same as trend_model
+  max_weight:       1.0       # long-only ETPs, no leverage
+  transaction_cost: 0.001     # 10 bps per unit turnover (ETP spreads + headroom)
+  initial_capital:  1_000_000
+
+oos_start: null

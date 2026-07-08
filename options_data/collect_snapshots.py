@@ -1,0 +1,123 @@
+"""
+Daily options-chain snapshot collector.
+
+Historical options data is not free (OptionMetrics/ORATS/CBOE DataShop), so
+this script banks our own: run it once per trading day and in six months a
+real surface dataset exists — today's collection is next year's data. It has
+no consumers yet by design; it exists so future projects (surface fitting,
+vol-risk-premium research) have point-in-time data nobody can question.
+
+What it stores, per ticker, per day:
+  snapshots/{YYYY-MM-DD}/{ticker}.parquet — every listed expiry's full chain
+  (calls+puts: strike, bid/ask/last, volume, open interest, implied vol) with
+  the underlying spot and a UTC fetch timestamp on every row.
+  snapshots/vix_term_structure.csv — one row per day of ^VIX9D/^VIX/^VIX3M
+  closes (appended, deduped), since the indices are the cheap always-useful
+  companion series.
+
+Idempotent: a ticker already snapshotted today is skipped (--force overrides).
+Yahoo's chains are 15-minute-delayed retail data — fine for building surface
+history, not for market-making. Run in the last hour of the session if you
+can (--force refreshes an earlier partial run); any consistent daily time
+works, the timestamp column records the truth.
+
+Schedule it (macOS, 15:30 ET example — adjust to your local time):
+  crontab -e
+  30 15 * * 1-5 cd /Users/markwang/Desktop/trading_model/options_data && /usr/bin/env python collect_snapshots.py >> collect.log 2>&1
+
+Run manually:
+    python collect_snapshots.py
+    python collect_snapshots.py --tickers SPY QQQ --force
+"""
+
+import argparse
+import datetime as dt
+from pathlib import Path
+
+import pandas as pd
+import yfinance as yf
+from loguru import logger
+
+DEFAULT_TICKERS = ["SPY", "QQQ", "IWM", "^SPX", "^VIX"]
+VIX_INDICES = ["^VIX9D", "^VIX", "^VIX3M"]
+ROOT = Path(__file__).resolve().parent / "snapshots"
+
+
+def snapshot_ticker(ticker: str, day_dir: Path, force: bool) -> None:
+    out = day_dir / f"{ticker.replace('^', '_')}.parquet"
+    if out.exists() and not force:
+        logger.info(f"{ticker}: already snapshotted today — skipped (--force to refresh)")
+        return
+    t = yf.Ticker(ticker)
+    expiries = t.options
+    if not expiries:
+        logger.warning(f"{ticker}: no listed expiries returned — skipped")
+        return
+    spot = None
+    for key in ("last_price", "lastPrice"):
+        try:
+            spot = float(t.fast_info[key])
+            break
+        except Exception:
+            continue
+    if spot is None:                       # index tickers often lack fast_info
+        h = t.history(period="1d")
+        spot = float(h["Close"].iloc[-1]) if not h.empty else None
+    ts = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+
+    frames = []
+    for exp in expiries:
+        try:
+            ch = t.option_chain(exp)
+        except Exception as e:
+            logger.warning(f"{ticker} {exp}: fetch failed ({e}) — expiry skipped")
+            continue
+        for side, df in (("call", ch.calls), ("put", ch.puts)):
+            if df is None or df.empty:
+                continue
+            df = df.copy()
+            df["type"], df["expiry"] = side, exp
+            frames.append(df)
+    if not frames:
+        logger.warning(f"{ticker}: no chain data — nothing written")
+        return
+    full = pd.concat(frames, ignore_index=True)
+    full["underlying"], full["spot"], full["fetched_utc"] = ticker, spot, ts
+    full.to_parquet(out)
+    logger.info(f"{ticker}: {len(full):,} contracts across {len(expiries)} expiries "
+                f"(spot={spot}) → {out.relative_to(ROOT.parent)}")
+
+
+def append_vix_term_structure() -> None:
+    path = ROOT / "vix_term_structure.csv"
+    raw = yf.download(VIX_INDICES, period="5d", auto_adjust=True, progress=False)
+    close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+    close = close.dropna(how="all")
+    if close.empty:
+        logger.warning("VIX indices: no data")
+        return
+    prev = pd.read_csv(path, index_col=0, parse_dates=True) if path.exists() else pd.DataFrame()
+    merged = pd.concat([prev, close])
+    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+    merged.to_csv(path)
+    logger.info(f"VIX term structure: {len(merged)} days on file → {path.name}")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tickers", nargs="*", default=DEFAULT_TICKERS)
+    ap.add_argument("--force", action="store_true")
+    args = ap.parse_args()
+
+    day_dir = ROOT / dt.date.today().isoformat()
+    day_dir.mkdir(parents=True, exist_ok=True)
+    for tk in args.tickers:
+        try:
+            snapshot_ticker(tk, day_dir, args.force)
+        except Exception as e:
+            logger.error(f"{tk}: {e}")
+    append_vix_term_structure()
+
+
+if __name__ == "__main__":
+    main()

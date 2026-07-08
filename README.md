@@ -17,13 +17,15 @@ negative results, written up alongside the one edge that survived.
 
 | Sleeve | Method | Result | Status |
 |---|---|---|---|
-| **`trend_model`** | Cross-asset time-series momentum (futures) | dev Sharpe **0.61 → OOS 0.38** | **survived OOS** — only one |
+| **`trend_model`** | Cross-asset time-series momentum (futures) | dev **0.61**, but roll-free replication: dev 0.31, **OOS −0.19 to +0.38 by data source** | **dev-robust, OOS unresolved** (2026-07 addendum) |
 | `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev ~0.6 → **OOS +0.25** | marginal, degraded |
+| `carry_model` | Futures carry, eq+rates (KMPV via free-data proxies) | dev 0.08, **OOS −1.20** | dead (US-only carry = 2 macro bets) |
+| `vix_model` | VIX term-structure switch (VRP via ETPs) | dev 0.38 / OOS −0.01; timing LOSES to static short-vol | shelved (timing subtracts value) |
 | `earnings_model` | PEAD / earnings-surprise drift | **OOS Sharpe −0.69** | dead (crowding decay) |
 | `statarb_model` | OU-process pairs (cointegration) | **−0.30 gross** | dead (no edge in large-cap) |
 | `smallcap_factor` | Same factor engine, S&P 600 | apparent IC t=3.3 was **survivorship** | unsupported (artifact) |
 | `insider_model` | Form-4 insider buying | Sharpe 0.13 / −0.01 | dead |
-| `sector_rotation` | Cross-sector momentum | Sharpe 0.03 | dead |
+| `sector_rotation` | Cross-sector momentum | dev ~0, **OOS −0.67**; 3 reformulations failed pre-set bars | dead (OOS-confirmed) |
 | `pinn_rl` | Physics-informed RL (Fokker-Planck + SAC) | lookahead artifact | **retired** |
 
 Analysis layers: **`factor_research`** (Fama-MacBeth premia, IC decay, turnover &
@@ -50,11 +52,22 @@ capacity) and **`signal_combiner`** (ridge vs XGBoost under purged/embargoed CV)
 
 ## Highlights
 
-**The one edge that survived (`trend_model`).** Cross-asset time-series momentum is
-the anomaly with a century of out-of-sample support. The premium localizes to
-equity-index and rates futures (decided on development data only); the dev-selected
-book held **0.61 → 0.38** out of sample — the first positive true-OOS result in the
-repo. [TREND_FINDING.md](TREND_FINDING.md).
+**The edge that survived dev — then met its own audit (`trend_model`).**
+Cross-asset time-series momentum localizes to equity-index and rates futures
+(decided on development data only); the dev-selected book read **0.61 → 0.38**
+out of sample on front-month "=F" data. Then the sleeve's own data caveat was
+*tested* instead of disclosed: an identical roll-free replication on ETF excess
+returns (`trend_model/validate_etf_proxy.py`) gives dev +0.31 but **OOS −0.19**
+— the dev premium is real across data sources, the OOS sign is not resolvable
+on free data. The claim was downgraded accordingly.
+[TREND_FINDING.md](TREND_FINDING.md) (see the 2026-07 addendum).
+
+**Killing the follow-up idea properly (`carry_model`).** Futures carry (KMPV
+2018) is the textbook complement to trend — and the free-data, US-only
+expression of it (ETF dividend yield − bills; Treasury term spread) failed a
+pre-registered bar on its one and only run: dev 0.08, OOS −1.20, despite
+delivering the promised −0.04 correlation to trend. With 8 US instruments,
+"carry" degenerates into two macro bets. Anomaly real; this expression of it, no.
 
 **Catching a fake edge (`smallcap_factor`).** Running the identical factor engine on
 small-caps produced a *highly significant* cross-sectional IC (t = 3.35). It was
@@ -79,7 +92,10 @@ analysis (~$5B AUM before Sharpe halves). The evaluation a desk runs before sizi
 shared/universe_pit.py     Point-in-time, survivorship-free universe + prices
 factor_model/              Cross-sectional value/quality/momentum/low-vol/size
 earnings_model/            PEAD earnings-drift sleeve
-trend_model/               Cross-asset time-series momentum (futures)  ← OOS survivor
+trend_model/               Cross-asset TSMOM (futures) — dev-robust; OOS data-dependent
+carry_model/               Futures carry, eq+rates (dead — free-data expression has no edge)
+vix_model/                 VIX term-structure sleeve (shelved — timing loses to static VRP)
+options_data/              Daily options-chain snapshot collector (point-in-time archive)
 statarb_model/             OU-process statistical-arbitrage (pairs)
 smallcap_factor/           Factor engine on S&P 600 (survivorship case study)
 insider_model/             Form-4 insider-buying sleeve
