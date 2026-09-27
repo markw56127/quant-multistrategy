@@ -192,3 +192,63 @@ the path are different objectives.
    growth-optimal leverage is psychologically and practically untenable. That is the
    case for fractional Kelly and vol targeting, stated quantitatively.
 
+
+## A4: multigroup covariance (follow-up, pre-registered 2026-09-26)
+
+**Why this is a follow-up and how it stays honest.** A1 showed the single-index and
+constant-correlation models fail on this universe because it is block-structured. The
+course's **multigroup model** (topic 6) is designed for exactly that. It was chosen
+*after* seeing the dev results, so **a dev-period test is not blind**, and dev is reported
+but carries no bar. The bar sits on two samples no one in this repo has examined:
+
+1. **Backcast (primary):** 1996–2008, using Vanguard index funds as proxies for the same
+   blocks. Nobody in this repo had looked at this period's returns when this was written.
+2. **OOS:** 2025-01 → 2026-08 on the ETFs (20 months, low power, secondary).
+
+**Estimator.** Groups are fixed by asset class. The within-group correlation is the mean
+pairwise correlation inside each group; the between-group correlation is the mean
+correlation across each pair of groups. Σᵢⱼ = ρ̄_{g(i)g(j)} σᵢ σⱼ, estimated on the trailing
+36 monthly returns like the other A1 estimators.
+
+| group | ETFs (dev, OOS) | backcast funds |
+|---|---|---|
+| equity | SPY, EFA, EEM, VNQ | VFINX, VGTSX, VEIEX, VGSIX |
+| treasury | IEF, TLT | VFITX, VUSTX |
+| credit | LQD | VFICX |
+| real | GLD, DBC | VGPMX (precious-metals equity; no commodity fund exists that early) |
+
+**Test.** Same as A1: the long-only GMV built from each estimator; the variance ratio of
+realized GMV returns, multigroup vs sample, with a 90% block-bootstrap CI.
+- **PASS:** the variance ratio is < 1 in the backcast **and** < 1 in OOS.
+- **STRONG PASS:** additionally, the backcast CI upper bound is < 1.
+- **Also reported (no bar):** single_index and const_corr in the backcast. That checks
+  whether A1's failure replicates on independent data. Also dev numbers (not blind), and
+  bias statistics.
+
+### A4 result: FAIL (`python multigroup.py`)
+
+Variance ratio of the realized long-only GMV vs the sample covariance (90% block-bootstrap CI):
+
+| sample | multigroup | single_index | const_corr |
+|---|---|---|---|
+| **backcast 1999-06 → 2008-12** (115 months, primary) | **1.127** [0.987, 1.203] | 1.149 [0.896, 1.321] | 1.248 [1.014, 1.739] |
+| **OOS 2025-01 → 2026-08** (20 months) | **1.109** [0.797, 1.380] | 1.066 [0.790, 1.806] | 0.586 [0.425, 1.058] |
+| dev 2009–24 (not blind) | 1.177 [1.116, 1.276] | 1.528 | 1.524 |
+
+- **Multigroup fails its bar.** It is worse than sample in both clean samples. It *is* much
+  better than single-index and constant-correlation on dev (1.18 vs 1.53), so modeling
+  the blocks fixes most of A1's damage. It just does not beat doing nothing.
+- **A1's failure replicates on independent data.** In the backcast decade, every structured
+  estimator is worse than sample. The OOS const_corr figure (0.59) rests on 20 months with
+  a CI reaching 1.06, and is not interpretable.
+- **The likely explanation is known theory.** Jagannathan & Ma (2003): **imposing no short
+  sales is equivalent to shrinking the covariance matrix.** The long-only GMV is already
+  regularized, so a structured model adds bias without removing much noise. Structured
+  models pay when N is large relative to T and short sales are allowed. That was the
+  course setting (30 stocks, 59 months), and it is the 450-stock risk model in
+  `../dynamic_trading`, where a PCA factor model is unavoidable.
+
+**Track A conclusion:** for a small multi-asset universe held long-only, use the sample
+(or daily 1-year) covariance. Choose the structured-versus-sample question by N/T and the
+short-sale constraint, not by default. The course methods remain the right tools for
+large cross-sections.
