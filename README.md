@@ -117,6 +117,7 @@ dynamic_trading/           Model-based control: identified LQ model → GP → A
 alpha_research/            Pre-registered mechanism-first alpha screen (0 of 6 pass)
 flow_events/               Forced-flow event studies (2 studies: both dev pass, OOS fail)
 premia_portfolio/          Risk-premia portfolio construction with the course methods (Track A)
+paper_trading/             Alpaca PAPER forward-test harness (paper-only client, ledger, shortfall)
 combine_strategies.py      Risk-parity multi-sleeve combiner
 oos_report.py              Development vs true-OOS report per sleeve
 
