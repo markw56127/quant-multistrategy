@@ -2,6 +2,13 @@
 
 **Status:** BUILT — value+quality composite, survivorship-corrected.
 
+> **SPLIT-LOOKAHEAD CORRECTION (2026-09-26):** market cap was adjusted price × as-reported
+> EDGAR shares, which leaked future splits into B/P, E/P and S/P ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)).
+> Corrected, the value+quality book's **dev net Sharpe is 0.16, not 0.62**. OOS is unchanged
+> at 0.25. The buffered variant is dev 0.03 / OOS 0.55. Every dev number below this banner
+> predates the fix and is **not** valid. `results/*.csv` are the corrected runs.
+
+
 > **TRUE-OOS UPDATE (2026-06):** the dev-period (2016–2024) Sharpe 0.61 below
 > **degraded to +0.25 on true out-of-sample data (2025–2026)** — real but marginal,
 > within one standard error of its dev value. The two-sleeve book that combined this

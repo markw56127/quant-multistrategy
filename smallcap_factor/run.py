@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from universe_pit import fetch_prices_survivorship_free, fetch_sectors  # noqa: E402
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
+from market_cap import add_market_cap  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
 from construction import long_short_weights, turnover  # noqa: E402
 from universe import fetch_sp600_universe  # noqa: E402
@@ -67,6 +68,7 @@ def run_smallcap(cfg: dict, out_path: str = "results/backtest.csv") -> pd.DataFr
     cik_map = fetch_cik_map(cache_dir=cache)
     fundamentals = fetch_factor_fundamentals(
         valid, prices.index, cache_dir=f"{cache}/factor_fund", cik_map=cik_map)
+    fundamentals = add_market_cap(fundamentals, prices, d["start_date"], cache_dir=cache)
     logger.info(f"Fundamentals: {fundamentals.shape}")
 
     logger.info("═══ Stage 4: Walk-forward backtest ═══")

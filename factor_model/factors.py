@@ -106,7 +106,12 @@ def compute_factor_scores(
         fund = fundamentals.xs(prior.max(), level="date")
 
     fund = fund.reindex(universe)
-    market_cap = last_px.reindex(universe) * fund["shares_outstanding"]
+    # Market cap MUST come from shared/market_cap.py. adjusted_price x EDGAR shares
+    # leaks future splits into every price multiple (SPLIT_FINDING.md), so fail loudly.
+    if "market_cap" not in fund.columns:
+        raise ValueError("fundamentals lack `market_cap`: call market_cap.add_market_cap() first "
+                         "(adjusted price x EDGAR shares is a lookahead; see SPLIT_FINDING.md)")
+    market_cap = fund["market_cap"]
 
     raw = pd.DataFrame(index=universe)
 

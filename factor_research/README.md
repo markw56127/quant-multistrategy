@@ -1,5 +1,21 @@
 # factor_research — statistical-alpha evaluation layer
 
+> **SPLIT-LOOKAHEAD CORRECTION (2026-09-26):** every number below was computed on a panel
+> whose market caps leaked future splits ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)).
+> Rerun on the corrected panel (`python run_report.py`):
+>
+> | factor | full t | dev t | OOS t |
+> |---|---|---|---|
+> | value | **+0.43** (was +2.97) | **−0.51** (was +1.90) | +4.37 |
+> | quality | +1.42 | +2.24 | −3.03 |
+> | size | −2.67 | −1.76 | −4.02 |
+>
+> Value's full-sample IC is −0.004 (was +0.010). The value+quality book has gross Sharpe
+> 0.32 (was 0.81) and net Sharpe 0.15 at $1B (was 0.58). **"Value is the one robust
+> premium" does not survive.** The text below is kept as the record of what the
+> contaminated panel showed. `split_audit.py` reproduces the before/after comparison.
+
+
 The academic-quant evaluation a research desk runs on a cross-sectional signal
 *before* sizing it: **Fama-MacBeth factor premia, IC analysis (level + decay),
 turnover/transaction-cost analysis, and capacity analysis** — all on the cached,

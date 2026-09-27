@@ -18,7 +18,7 @@ negative results, written up alongside the one edge that survived.
 | Sleeve | Method | Result | Status |
 |---|---|---|---|
 | **`trend_model`** | Cross-asset time-series momentum (futures) | dev **0.61**, but roll-free replication: dev 0.31, **OOS −0.19 to +0.38 by data source** | **dev-robust, OOS unresolved** (2026-07 addendum) |
-| `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev ~0.6 → **OOS +0.25** | marginal, degraded |
+| `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev **0.16** (was 0.62: split lookahead) → **OOS +0.25** | no dev edge; OOS marginal |
 | `carry_model` | Futures carry, eq+rates (KMPV via free-data proxies) | dev 0.08, **OOS −1.20** | dead (US-only carry = 2 macro bets) |
 | `vix_model` | VIX term-structure switch (VRP via ETPs) | dev 0.38 / OOS −0.01; timing LOSES to static short-vol | shelved (timing subtracts value) |
 | `earnings_model` | PEAD / earnings-surprise drift | **OOS Sharpe −0.69** | dead (crowding decay) |
@@ -27,6 +27,7 @@ negative results, written up alongside the one edge that survived.
 | `insider_model` | Form-4 insider buying | Sharpe 0.13 / −0.01 | dead |
 | `sector_rotation` | Cross-sector momentum | dev ~0, **OOS −0.67**; 3 reformulations failed pre-set bars | dead (OOS-confirmed) |
 | `pinn_rl` | Physics-informed RL (Fokker-Planck + SAC) | lookahead artifact | **retired** |
+| `dynamic_trading` | Model-based control on value+quality: GP LQ (M2), analytic policy gradients (M4), neural MBRL (M6), VP pessimistic selection (M5) | all built on the split-contaminated panel; surrogate-optimized M2/M4/M6 failed bars even so; M5's dev pass **void** | method results stand as method results; no dev edge underneath |
 
 Analysis layers: **`factor_research`** (Fama-MacBeth premia, IC decay, turnover &
 capacity) and **`signal_combiner`** (ridge vs XGBoost under purged/embargoed CV).
@@ -40,7 +41,12 @@ capacity) and **`signal_combiner`** (ridge vs XGBoost under purged/embargoed CV)
   [SURVIVORSHIP_FINDING.md](SURVIVORSHIP_FINDING.md).
 - **Lookahead discipline** — signals read only data available at the decision time;
   vols and weights use strictly-prior windows. A lookahead audit retired the entire
-  PINN-RL sleeve. See [LOOKAHEAD_FINDING.md](LOOKAHEAD_FINDING.md).
+  PINN-RL sleeve. See [LOOKAHEAD_FINDING.md](LOOKAHEAD_FINDING.md). A second audit
+  (2026-09) found that market cap = split-adjusted price × as-reported EDGAR shares
+  leaked **future splits** into every price multiple. It *was* the dev-period value
+  premium (t 1.90 → −0.51 once corrected). Market cap now comes from
+  `shared/market_cap.py`, and `factors.py` refuses to run without it. See
+  [SPLIT_FINDING.md](SPLIT_FINDING.md).
 - **True out-of-sample** — every config runs through 2026-06; the 2025+ window was
   never seen during development. `oos_report.py` splits dev vs OOS per sleeve. This
   is where the two-sleeve book that looked like Sharpe 0.75 revealed itself as ~0.
@@ -73,18 +79,19 @@ delivering the promised −0.04 correlation to trend. With 8 US instruments,
 small-caps produced a *highly significant* cross-sectional IC (t = 3.35). It was
 fake: dropping the `size` factor collapsed IC to t = 0.32, because current-constituent
 small-caps condition on survival and `size` returned a survivorship-driven +3,566%.
-The same toolkit that found a real value premium (Fama-MacBeth t ≈ 3 in
-`factor_research`) exposed the illusion — that contrast is the point.
+The same toolkit later exposed a subtler one in the large-cap value premium itself
+(split lookahead, [SPLIT_FINDING.md](SPLIT_FINDING.md)). The illusions are the point.
 
 **ML done honestly (`signal_combiner`).** A linear-vs-XGBoost bake-off under
-purged/embargoed CV: XGBoost does **not** beat a regularized linear model, and
-learned combiners are regime-fragile vs. the naive composite. At equity-factor
-signal-to-noise, the simplest combiner wins — demonstrated, not asserted.
+purged/embargoed CV. On the split-corrected panel every combiner is negative in dev
+(L/S Sharpe −0.17 to −0.38): there is no dev signal among the five factors to
+combine. The original "simplest combiner wins" result rested on the lookahead.
 
 **The statistical layer (`factor_research`).** Fama-MacBeth factor premia with
-Newey-West t-stats (value is the lone robust premium), IC-decay profiles, turnover /
-transaction-cost breakeven (>50 bps), and square-root market-impact capacity
-analysis (~$5B AUM before Sharpe halves). The evaluation a desk runs before sizing.
+Newey-West t-stats, IC-decay profiles, turnover / transaction-cost breakeven, and
+square-root market-impact capacity analysis. On corrected market caps, no factor
+has a full-sample premium above |t| = 2 except a *negative* size premium
+(t = −2.67). Value is t = 0.43 (dev −0.51, OOS +4.37).
 
 ## Repository layout
 
@@ -103,6 +110,7 @@ sector_rotation/           Cross-sector momentum sleeve
 signal_combiner/           Ridge vs XGBoost combiner, purged/embargoed CV
 factor_research/           Fama-MacBeth, IC decay, turnover & capacity analysis
 pinn_rl/                   Physics-informed RL sleeve (RETIRED — lookahead)
+dynamic_trading/           Model-based control: identified LQ model → GP → APG (failed bars)
 combine_strategies.py      Risk-parity multi-sleeve combiner
 oos_report.py              Development vs true-OOS report per sleeve
 

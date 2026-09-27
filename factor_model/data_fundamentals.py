@@ -154,7 +154,8 @@ def _build_factor_fundamentals(
     # Shares outstanding (point-in-time, for market cap)
     shares = _shares_outstanding(facts)
     out["shares_outstanding"] = (
-        shares.reindex(trading_dates).ffill().bfill() if not shares.empty else np.nan
+        # ffill only: back-filling would use a later filing's count before it existed
+        shares.reindex(trading_dates).ffill() if not shares.empty else np.nan
     )
 
     return out

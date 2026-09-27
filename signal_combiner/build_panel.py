@@ -34,6 +34,7 @@ from universe_pit import (  # noqa: E402
     historical_universe, membership_matrix, fetch_sectors, fetch_prices_survivorship_free,
 )
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
+from market_cap import add_market_cap  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
 
 
@@ -59,6 +60,7 @@ def build_panel(rebuild: bool = False) -> pd.DataFrame:
     cik_map = fetch_cik_map(cache_dir=cache)
     fundamentals = fetch_factor_fundamentals(
         valid, prices.index, cache_dir=f"{cache}/factor_fund", cik_map=cik_map)
+    fundamentals = add_market_cap(fundamentals, prices, d["start_date"], cache_dir=cache)
 
     dates = prices.index
     rebal_dates = dates[bt["warmup_days"]::bt["rebalance_freq"]]

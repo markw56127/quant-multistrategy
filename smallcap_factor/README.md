@@ -1,5 +1,11 @@
 # smallcap_factor — same factor engine, small-cap pond  ·  thesis NOT supported
 
+> **SPLIT-LOOKAHEAD CORRECTION (2026-09-26):** rerun with corrected market caps
+> ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)). The verdict is unchanged. Size is still a
+> survivorship artifact (L/S Sharpe 2.92, +3,113%). Value moves from 0.44 to 0.31, and the
+> all-5 IC t is 3.25 (was 3.35). The numbers below are pre-fix.
+
+
 The repo's recurring lesson is that every equity edge dies because US large-cap is
 the most arbitraged market on earth. Factor premia (value, quality, size especially)
 are documented to be *stronger* where there's less coverage and slower arbitrage — so

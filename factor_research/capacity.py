@@ -120,9 +120,8 @@ def main():
     peak_txt = ">$5B (still rising)" if pnl_rising else f"~${cap.loc[cap['net_pnl'].idxmax(),'aum']/1e6:.0f}M"
     print(f"\nnet dollar P&L peaks: {peak_txt}   "
           f"net Sharpe halves (½ of {g_sharpe:.2f}) by: {half_aum}")
-    print("→ value+quality is LOW-turnover and HIGH-capacity: slow signal (IC rises "
-          "with horizon), so impact stays small into the billions. The opposite of a\n"
-          "  fast/crowded alpha — its constraint is the size of the edge, not capacity.")
+    print("→ capacity is bounded by the size of the gross edge; read net Sharpe against "
+          "the frictionless line above.")
     cap.to_csv(ROOT / "results" / "capacity.csv", index=False)
 
 

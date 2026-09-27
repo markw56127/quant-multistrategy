@@ -1,6 +1,13 @@
 # True out-of-sample result (2025-01 → 2026-06)
 
 **Date:** 2026-06-15
+
+> **ADDENDUM (2026-09-26), split-lookahead correction ([SPLIT_FINDING.md](SPLIT_FINDING.md)).**
+> The dev column below was inflated by future-split leakage in market cap. Corrected
+> (`oos_report.py`): factor_vq dev **+0.16** / OOS +0.25, PEAD unchanged (+0.29 / −0.69),
+> combined book dev **+0.34** / OOS −0.15. The OOS conclusion stands, and the "degradation"
+> was mostly never there: factor_vq's dev edge was the artifact, not the OOS.
+
 **Test:** Extended `factor_model` and `earnings_model` configs to `end_date 2026-06-30`,
 re-fetched all prices + EDGAR fundamentals/earnings, and evaluated the development
 period (≤2024) against ~18 months of data that had never touched any config,

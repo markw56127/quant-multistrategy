@@ -1,5 +1,13 @@
 # signal_combiner — linear vs XGBoost bake-off
 
+> **SPLIT-LOOKAHEAD CORRECTION (2026-09-26):** the panel is rebuilt with corrected market
+> caps ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)). Dev L/S Sharpe is now **negative for
+> every combiner**: EW −0.38, OLS −0.17, ridge −0.17, XGB −0.19. OOS is EW −0.25, ridge
+> +0.81, XGB +0.10 over 18 months (SE ≈ 0.8). With no dev signal in the five factors, the
+> bake-off has nothing to discriminate. The conclusions below describe the contaminated
+> panel. `results/bakeoff.csv` is the corrected run.
+
+
 Does a more flexible model combine the five factor signals (value, momentum,
 quality, low_vol, size) into a better cross-sectional return forecast than the
 naive equal-weight composite the factor sleeve already trades? Four combiners,

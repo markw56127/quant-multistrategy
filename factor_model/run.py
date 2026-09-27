@@ -41,6 +41,7 @@ from universe_pit import (  # noqa: E402
 # factor_model modules
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from data_fundamentals import fetch_factor_fundamentals, fetch_cik_map  # noqa: E402
+from market_cap import add_market_cap  # noqa: E402
 from factors import compute_factor_scores, FACTORS  # noqa: E402
 from construction import (  # noqa: E402
     long_short_weights, long_only_weights, buffered_long_short_weights, turnover,
@@ -91,6 +92,7 @@ def run_factor_model(cfg: dict, out_path: str = "results/backtest.csv") -> pd.Da
     fundamentals = fetch_factor_fundamentals(
         valid, prices.index, cache_dir=f"{cache}/factor_fund", cik_map=cik_map,
     )
+    fundamentals = add_market_cap(fundamentals, prices, d["start_date"], cache_dir=cache)
     logger.info(f"Fundamentals: {fundamentals.shape}")
 
     # ── SPY benchmark ─────────────────────────────────────────────────────
