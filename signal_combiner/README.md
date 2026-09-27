@@ -1,9 +1,9 @@
 # signal_combiner — linear vs XGBoost bake-off
 
 > **SPLIT-LOOKAHEAD CORRECTION (2026-09-26):** the panel is rebuilt with corrected market
-> caps ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)). Dev L/S Sharpe is now **negative for
-> every combiner**: EW −0.38, OLS −0.17, ridge −0.17, XGB −0.19. OOS is EW −0.25, ridge
-> +0.81, XGB +0.10 over 18 months (SE ≈ 0.8). With no dev signal in the five factors, the
+> caps ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)). With the split and TTM fixes, dev L/S
+> Sharpe is **≤ 0 for every combiner**: EW −0.44, OLS −0.00, ridge −0.01, XGB −0.06. OOS is
+> EW −0.42, ridge +0.41, XGB +0.70 over 18 months (SE ≈ 0.8). With no dev signal in the five factors, the
 > bake-off has nothing to discriminate. The conclusions below describe the contaminated
 > panel. `results/bakeoff.csv` is the corrected run.
 

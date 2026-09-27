@@ -87,7 +87,48 @@ barely contaminated. But it is 18 months, and value had a strong 2025.
 What stands: the OOS numbers are close to right, momentum and low_vol are
 unaffected, and every sleeve that doesn't use EDGAR market cap is unaffected.
 
-## Also found
+## Also found: TTM flows dropped fourth quarters (not lookahead; fixed 2026-09-26)
+
+`data_fundamentals._flow_quarterly` kept only facts with ~90-day durations. Companies
+usually report Q4 only inside the 10-K's full-year figure, and cash-flow statements report
+year-to-date amounts, so the "last four quarters" routinely spanned 15+ months or mixed
+periods. Across 78 names checked, the old TTM net income was off by more than 25% in 60% of
+stock-months:
+
+| TTM net income | old | corrected | published |
+|---|---|---|---|
+| AAPL, to Sep-2021 | $64.7B | $94.7B | $94.7B |
+| AMZN, to Sep-2023 | $0.2B | $20.1B | ~$20B |
+| ABT, to Sep-2019 | $1.5B | $3.3B | ~$3.3B |
+
+This hit E/P and S/P (value) and ROE and GP/A (quality). The fix is `shared/edgar_pit.py`:
+TTM from each filing's own numbers (a 10-K's fiscal year, or a 10-Q's
+FY + YTD − prior-year YTD from its comparative column, which is consistent through
+restatements), tested against published figures in `shared/test_edgar_pit.py`.
+`factor_model/data_fundamentals.py` now builds every column from it.
+
+**Rerun after BOTH fixes (the current numbers):**
+
+| | original | split fix only | **split + TTM fix** |
+|---|---|---|---|
+| factor_vq net Sharpe, dev / OOS | 0.62 / 0.25 | 0.16 / 0.25 | **−0.12 / −0.23** |
+| combined book (with PEAD), dev / OOS | 0.75 / −0.05 | 0.34 / −0.15 | **0.11 / −0.62** |
+| value FM t, dev / OOS | +1.90 / +5.64 | −0.51 / +4.37 | **−0.96 / +4.92** |
+| quality FM t, dev / OOS | +2.13 / −2.92 | +2.24 / −3.03 | **+1.78 / −4.85** |
+| v+q book gross Sharpe (factor_research) | 0.81 | 0.32 | **0.03** |
+| signal_combiner dev L/S Sharpe (EW / ridge / XGB) | positive | −0.38 / −0.17 / −0.19 | **−0.44 / −0.01 / −0.06** |
+
+Coverage checked: panel coverage is value 90.8% vs 92.1% before, and quality 97.4% vs
+95.5%, so the change is in the numbers, not a data gap. GrossProfit is reported by only
+~38% of panel names, banks especially. Quality then rests on ROE alone for the rest,
+exactly as its definition already implied. Six names (AVB, BBBY, BK, EA, EQR, LEG) have no
+raw Yahoo history, since they were delisted in 2026 and Yahoo dropped them. None of them
+split in-sample, so they keep the adjusted-price market cap, off only by dividend
+adjustment. `smallcap_factor` has **not** been rerun on the TTM fix, because that would
+need an EDGAR fetch for the S&P 600. Its verdict (size = survivorship) does not depend on
+TTM flows.
+
+## Also found: shares back-fill
 
 `data_fundamentals._build_factor_fundamentals` back-fills shares outstanding
 before a company's first filing (`.ffill().bfill()`). That is lookahead too, but
@@ -108,7 +149,7 @@ mostly post-2015 IPOs.
   1e-15. The pre-fix panel is kept as `panel_presplitfix.parquet` so historical
   `dynamic_trading` numbers stay reproducible.
 
-Rerun results:
+Rerun results after the split fix only. **Superseded below by the TTM fix**:
 
 | | before | **after** |
 |---|---|---|

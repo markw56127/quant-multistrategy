@@ -4,9 +4,9 @@
 
 > **ADDENDUM (2026-09-26), split-lookahead correction ([SPLIT_FINDING.md](SPLIT_FINDING.md)).**
 > The dev column below was inflated by future-split leakage in market cap. Corrected
-> (`oos_report.py`): factor_vq dev **+0.16** / OOS +0.25, PEAD unchanged (+0.29 / −0.69),
-> combined book dev **+0.34** / OOS −0.15. The OOS conclusion stands, and the "degradation"
-> was mostly never there: factor_vq's dev edge was the artifact, not the OOS.
+> (`oos_report.py`, after the split AND TTM fixes): factor_vq dev **−0.12** / OOS **−0.23**,
+> PEAD unchanged (+0.29 / −0.69), combined book dev **+0.11** / OOS **−0.62**. The book never
+> had an edge. The dev Sharpe of 0.75 was data defects.
 
 **Test:** Extended `factor_model` and `earnings_model` configs to `end_date 2026-06-30`,
 re-fetched all prices + EDGAR fundamentals/earnings, and evaluated the development

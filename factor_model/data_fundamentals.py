@@ -1,219 +1,89 @@
 """
 Balance-sheet and income fundamentals from SEC EDGAR for factor construction.
 
-Extends what sector_model/data/sec_edgar.py provides (EPS, revenue, shares)
-with the items needed for proper value and quality factors:
-  - StockholdersEquity  → book value (for Book-to-Price)
-  - NetIncomeLoss       → ROE, net profit margin
-  - Assets              → return on assets, gross profitability denominator
-  - GrossProfit         → gross profitability (Novy-Marx 2013)
+Columns (daily, point-in-time, one row per trading date):
+  book_equity        StockholdersEquity (instant)
+  total_assets       Assets (instant)
+  net_income_ttm     NetIncomeLoss / ProfitLoss (trailing 4 quarters)
+  gross_profit_ttm   GrossProfit (trailing 4 quarters)
+  revenue_ttm        Revenues / ASC 606 revenue tags (trailing 4 quarters)
+  shares_outstanding dei:EntityCommonStockSharesOutstanding, AS REPORTED. Use
+                     shared/market_cap.py for market cap, never price x this
+                     (SPLIT_FINDING.md).
 
-Flow items (net income, gross profit) are reported as quarterly amounts in
-10-Q and as full-year amounts in 10-K. We separate them by the reporting
-period duration (≈90 days = quarterly, ≈365 days = annual) so TTM sums don't
-double-count the annual figure. Balance-sheet items (equity, assets) are
-point-in-time snapshots and need no such handling.
+Extraction is shared/edgar_pit.py: the earliest filing per period, available the day
+after filing, and TTM flows built by differencing each tag's year-to-date chain.
 
-All series are indexed by FILING date (+1 day) so there is no look-ahead bias.
+History (2026-09-26): the original version kept only ~90-day flow facts. Q4 usually
+exists only inside the 10-K's full-year figure, so its "last four quarters" often
+spanned 15+ months or mixed periods (AMZN TTM net income read $0.2B at 2023-09
+against ~$20B actual). It also back-filled shares before a company's first filing.
+Both are fixed here; see SPLIT_FINDING.md, "Also found".
 """
 
 import sys
-import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 from loguru import logger
 
-# Reuse the SEC fetching primitives from sector_model
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sector_model"))
-from data.sec_edgar import _fetch_facts, fetch_cik_map, _shares_outstanding  # noqa: E402
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "sector_model"))
+sys.path.insert(0, str(REPO / "shared"))
+from data.sec_edgar import fetch_cik_map  # noqa: E402,F401  (re-exported for callers)
+from edgar_pit import fetch as fetch_facts, ttm_flow, instant  # noqa: E402
 
-_DELAY = 0.22  # SEC rate limit courtesy
-
-# Flow items: reported as quarterly (10-Q) and annual (10-K) amounts
-_NET_INCOME_TAGS = ["NetIncomeLoss", "ProfitLoss"]
-_GROSS_PROFIT_TAGS = ["GrossProfit"]
-_REVENUE_TAGS = [
-    "Revenues",
-    "RevenueFromContractWithCustomerExcludingAssessedTax",
-    "SalesRevenueNet",
-]
-# Point-in-time balance sheet items
-_EQUITY_TAGS = ["StockholdersEquity"]
-_ASSETS_TAGS = ["Assets"]
+NET_INCOME = ["NetIncomeLoss", "ProfitLoss"]
+GROSS_PROFIT = ["GrossProfit"]
+REVENUE = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet",
+           "RevenueFromContractWithCustomerIncludingAssessedTax"]
+EQUITY = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]
+ASSETS = ["Assets"]
+SHARES = ["dei:SharesOutstanding"]
 
 
-def _flow_quarterly(facts: dict, tags: List[str]) -> pd.Series:
-    """
-    Extract a quarterly FLOW series (net income, gross profit, revenue) indexed
-    by filing date. Separates true quarterly entries (~90-day duration) from
-    annual entries (~365 days) and keeps only quarterly amounts so a trailing
-    4-quarter sum gives a clean TTM figure.
-
-    Tags are MERGED across all candidates rather than picking the first
-    non-empty one — GAAP tag names change over time (e.g. ASC 606 in 2018
-    switched revenue from `Revenues` to `RevenueFromContractWith...`). Merging
-    by period_end and preferring the most recently filed value gives continuous
-    coverage across the transition.
-    """
-    gaap = facts.get("facts", {}).get("us-gaap", {})
-    rows = []
-    for tag in tags:
-        if tag not in gaap:
-            continue
-        for e in gaap[tag].get("units", {}).get("USD", []):
-            if e.get("form", "") not in ("10-Q", "10-K"):
-                continue
-            start, end = e.get("start"), e.get("end")
-            if start is None or end is None:
-                continue
-            dur = (pd.Timestamp(end) - pd.Timestamp(start)).days
-            if not (60 <= dur <= 120):   # quarterly durations only
-                continue
-            rows.append({
-                "period_end": pd.Timestamp(end),
-                "filed":      pd.Timestamp(e["filed"]),
-                "val":        float(e["val"]),
-            })
-    if not rows:
-        return pd.Series(dtype=float)
-    df = pd.DataFrame(rows).sort_values("filed")
-    df = df.drop_duplicates(subset="period_end", keep="last")
-    df = df.drop_duplicates(subset="filed", keep="last")
-    s = df.set_index("filed")["val"].sort_index()
-    s.index = s.index + pd.Timedelta(days=1)
-    return s
-
-
-def _instant_quarterly(facts: dict, tags: List[str]) -> pd.Series:
-    """
-    Extract a point-in-time BALANCE-SHEET series (equity, assets) indexed by
-    filing date. These are instants (no duration), reported each 10-Q/10-K.
-    """
-    gaap = facts.get("facts", {}).get("us-gaap", {})
-    rows = []
-    for tag in tags:
-        if tag not in gaap:
-            continue
-        for e in gaap[tag].get("units", {}).get("USD", []):
-            if e.get("form", "") not in ("10-Q", "10-K"):
-                continue
-            if e.get("end") is None:
-                continue
-            rows.append({
-                "period_end": pd.Timestamp(e["end"]),
-                "filed":      pd.Timestamp(e["filed"]),
-                "val":        float(e["val"]),
-            })
-    if not rows:
-        return pd.Series(dtype=float)
-    df = pd.DataFrame(rows).sort_values("filed")
-    df = df.drop_duplicates(subset="period_end", keep="last")
-    df = df.drop_duplicates(subset="filed", keep="last")
-    s = df.set_index("filed")["val"].sort_index()
-    s.index = s.index + pd.Timedelta(days=1)
-    return s
-
-
-def _ttm(quarterly: pd.Series, trading_dates: pd.DatetimeIndex) -> pd.Series:
-    """Trailing-12-month sum of a quarterly flow series, as of each trading date."""
-    if quarterly.empty:
-        return pd.Series(np.nan, index=trading_dates)
-    ann = sorted(quarterly.index)
-    out: dict = {}
-    for d in trading_dates:
-        past = [dt for dt in ann if dt <= d]
-        if len(past) >= 4:
-            out[d] = float(quarterly.reindex(past).iloc[-4:].sum())
-        elif len(past) >= 1:
-            out[d] = float(quarterly.reindex(past).sum()) * (4.0 / len(past))  # annualise
-    return pd.Series(out, name="ttm").reindex(trading_dates).astype(float)
-
-
-def _build_factor_fundamentals(
-    ticker: str,
-    facts: dict,
-    trading_dates: pd.DatetimeIndex,
-) -> pd.DataFrame:
-    """Per-ticker raw fundamental series needed by factors.py."""
-    out = pd.DataFrame(index=trading_dates, dtype=np.float64)
-
-    # Point-in-time balance sheet (forward-fill between filings)
-    equity = _instant_quarterly(facts, _EQUITY_TAGS)
-    assets = _instant_quarterly(facts, _ASSETS_TAGS)
-    out["book_equity"] = equity.reindex(trading_dates).ffill() if not equity.empty else np.nan
-    out["total_assets"] = assets.reindex(trading_dates).ffill() if not assets.empty else np.nan
-
-    # TTM flow items
-    out["net_income_ttm"]  = _ttm(_flow_quarterly(facts, _NET_INCOME_TAGS), trading_dates)
-    out["gross_profit_ttm"] = _ttm(_flow_quarterly(facts, _GROSS_PROFIT_TAGS), trading_dates)
-    out["revenue_ttm"]     = _ttm(_flow_quarterly(facts, _REVENUE_TAGS), trading_dates)
-
-    # Shares outstanding (point-in-time, for market cap)
-    shares = _shares_outstanding(facts)
-    out["shares_outstanding"] = (
-        # ffill only: back-filling would use a later filing's count before it existed
-        shares.reindex(trading_dates).ffill() if not shares.empty else np.nan
-    )
-
-    return out
+def _build(facts: pd.DataFrame, dates: pd.DatetimeIndex) -> pd.DataFrame:
+    return pd.DataFrame({
+        "book_equity": instant(facts, EQUITY, dates),
+        "total_assets": instant(facts, ASSETS, dates),
+        "net_income_ttm": ttm_flow(facts, NET_INCOME, dates),
+        "gross_profit_ttm": ttm_flow(facts, GROSS_PROFIT, dates),
+        "revenue_ttm": ttm_flow(facts, REVENUE, dates),
+        "shares_outstanding": instant(facts, SHARES, dates),
+    }, index=dates)
 
 
 def fetch_factor_fundamentals(
     tickers: List[str],
     trading_dates: pd.DatetimeIndex,
     cache_dir: Optional[str] = None,
-    cik_map: Optional[Dict[str, str]] = None,
+    cik_map: Optional[Dict[str, str]] = None,        # kept for signature compatibility
 ) -> pd.DataFrame:
-    """
-    Fetch balance-sheet/income fundamentals for all tickers.
-    Returns a (date, ticker) MultiIndex DataFrame.
-    """
-    if cik_map is None:
-        cik_map = fetch_cik_map(cache_dir)
+    """(date, ticker) MultiIndex panel of point-in-time fundamentals.
 
+    `cache_dir` is the per-ticker factor cache (e.g. factor_model/cache/factor_fund). The
+    corrected frames live in the sibling `factor_fund_pit/` so they never mix with frames
+    built by the old extraction; the CIK map is read from the parent directory."""
+    root = Path(cache_dir).parent if cache_dir else REPO / "factor_model" / "cache"
+    out_dir = root / "factor_fund_pit"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    facts = fetch_facts(tickers, str(root))
     frames = []
-    n = len(tickers)
-    for i, ticker in enumerate(tickers):
-        cache_path = Path(cache_dir) / f"{ticker}_factor_fund.parquet" if cache_dir else None
-        feat = None
-        if cache_path and cache_path.exists():
-            feat = pd.read_parquet(cache_path)
-            # STALENESS CHECK (2026-06): cached frames are reindexed to the
-            # trading calendar at BUILD time. If the requested calendar now
-            # extends well past the cached frame's last date, the cache was
-            # built against an older end_date and must be rebuilt — otherwise
-            # 2025+ rows would silently carry missing/stale fundamentals.
-            if len(feat) == 0 or feat.index.max() < trading_dates.max() - pd.Timedelta(days=60):
-                logger.debug(f"  {ticker}: fundamentals cache stale — rebuilding from EDGAR")
-                feat = None
+    for t in tickers:
+        p = out_dir / f"{t}.parquet"
+        feat = pd.read_parquet(p) if p.exists() else None
+        if feat is not None and (len(feat) == 0 or feat.index.max() < trading_dates.max() - pd.Timedelta(days=60)):
+            feat = None                                   # built for an older calendar
         if feat is None:
-            cik = cik_map.get(ticker.upper())
-            if cik is None:
+            if facts[t].empty:
                 continue
-            if i > 0:
-                time.sleep(_DELAY)
-            facts = _fetch_facts(cik)
-            if facts is None:
-                continue
-            feat = _build_factor_fundamentals(ticker, facts, trading_dates)
-            if cache_path:
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                feat.to_parquet(cache_path)
-            if (i + 1) % 25 == 0:
-                logger.info(f"Factor fundamentals: {i+1}/{n} tickers")
-
-        feat = feat.copy()
-        feat["ticker"] = ticker
-        frames.append(feat)
-
+            feat = _build(facts[t], trading_dates)
+            feat.to_parquet(p)
+        frames.append(feat.assign(ticker=t))
     if not frames:
         return pd.DataFrame()
-
     panel = pd.concat(frames)
-    panel.index = pd.MultiIndex.from_arrays(
-        [panel.index, panel["ticker"]], names=["date", "ticker"]
-    )
-    return panel.drop(columns=["ticker"])
+    panel.index = pd.MultiIndex.from_arrays([panel.index, panel.pop("ticker")], names=["date", "ticker"])
+    logger.info(f"Fundamentals (point-in-time): {panel.index.get_level_values('ticker').nunique()} tickers")
+    return panel

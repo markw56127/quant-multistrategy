@@ -18,7 +18,8 @@ negative results, written up alongside the one edge that survived.
 | Sleeve | Method | Result | Status |
 |---|---|---|---|
 | **`trend_model`** | Cross-asset time-series momentum (futures) | dev **0.61**, but roll-free replication: dev 0.31, **OOS −0.19 to +0.38 by data source** | **dev-robust, OOS unresolved** (2026-07 addendum) |
-| `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev **0.16** (was 0.62: split lookahead) → **OOS +0.25** | no dev edge; OOS marginal |
+| `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev **−0.12** / OOS **−0.23** (was 0.62 / 0.25 before the split + TTM data fixes) | **dead**: no edge in either window |
+| `alpha_research` | Pre-registered, mechanism-first screen: asset growth, issuance, accruals, R&D, ST reversal, index-deletion rebound | 0 of 6 pass Holm at 5% FWER (best: accruals t = −1.72) | none adopted; OOS untouched |
 | `carry_model` | Futures carry, eq+rates (KMPV via free-data proxies) | dev 0.08, **OOS −1.20** | dead (US-only carry = 2 macro bets) |
 | `vix_model` | VIX term-structure switch (VRP via ETPs) | dev 0.38 / OOS −0.01; timing LOSES to static short-vol | shelved (timing subtracts value) |
 | `earnings_model` | PEAD / earnings-surprise drift | **OOS Sharpe −0.69** | dead (crowding decay) |
@@ -89,9 +90,9 @@ combine. The original "simplest combiner wins" result rested on the lookahead.
 
 **The statistical layer (`factor_research`).** Fama-MacBeth factor premia with
 Newey-West t-stats, IC-decay profiles, turnover / transaction-cost breakeven, and
-square-root market-impact capacity analysis. On corrected market caps, no factor
+square-root market-impact capacity analysis. On corrected fundamentals, no factor
 has a full-sample premium above |t| = 2 except a *negative* size premium
-(t = −2.67). Value is t = 0.43 (dev −0.51, OOS +4.37).
+(t = −2.40). Value is t = −0.08 (dev −0.96, OOS +4.92).
 
 ## Repository layout
 
@@ -111,6 +112,7 @@ signal_combiner/           Ridge vs XGBoost combiner, purged/embargoed CV
 factor_research/           Fama-MacBeth, IC decay, turnover & capacity analysis
 pinn_rl/                   Physics-informed RL sleeve (RETIRED — lookahead)
 dynamic_trading/           Model-based control: identified LQ model → GP → APG (failed bars)
+alpha_research/            Pre-registered mechanism-first alpha screen (0 of 6 pass)
 combine_strategies.py      Risk-parity multi-sleeve combiner
 oos_report.py              Development vs true-OOS report per sleeve
 

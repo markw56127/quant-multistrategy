@@ -6,12 +6,14 @@
 >
 > | factor | full t | dev t | OOS t |
 > |---|---|---|---|
-> | value | **+0.43** (was +2.97) | **−0.51** (was +1.90) | +4.37 |
-> | quality | +1.42 | +2.24 | −3.03 |
-> | size | −2.67 | −1.76 | −4.02 |
+> | value | **−0.08** (was +2.97) | **−0.96** (was +1.90) | +4.92 |
+> | quality | +0.35 | +1.78 | −4.85 |
+> | size | −2.40 | −1.55 | −3.44 |
 >
-> Value's full-sample IC is −0.004 (was +0.010). The value+quality book has gross Sharpe
-> 0.32 (was 0.81) and net Sharpe 0.15 at $1B (was 0.58). **"Value is the one robust
+> (Split fix plus the TTM fix; see SPLIT_FINDING.md.)
+>
+> The value+quality book has gross Sharpe **0.03** (was 0.81) and is net-negative at every
+> AUM. **"Value is the one robust
 > premium" does not survive.** The text below is kept as the record of what the
 > contaminated panel showed. `split_audit.py` reproduces the before/after comparison.
 

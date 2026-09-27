@@ -4,8 +4,10 @@
 
 > **SPLIT-LOOKAHEAD CORRECTION (2026-09-26):** market cap was adjusted price × as-reported
 > EDGAR shares, which leaked future splits into B/P, E/P and S/P ([../SPLIT_FINDING.md](../SPLIT_FINDING.md)).
-> Corrected, the value+quality book's **dev net Sharpe is 0.16, not 0.62**. OOS is unchanged
-> at 0.25. The buffered variant is dev 0.03 / OOS 0.55. Every dev number below this banner
+> A second fix (TTM flows were dropping Q4s, which corrupted E/P, S/P and ROE) followed the
+> same day. With both, the value+quality book is **dev −0.12 / OOS −0.23 net Sharpe**
+> (was 0.62 / 0.25). The buffered variant is dev 0.02 overall. **There is no edge in either
+> window.** Every dev number below this banner
 > predates the fix and is **not** valid. `results/*.csv` are the corrected runs.
 
 
