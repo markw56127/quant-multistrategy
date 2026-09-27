@@ -21,15 +21,30 @@ Idempotent (same-day reruns skipped; `--force` refreshes). Yahoo chains are
 market-making. Best run in the last hour of the session; any consistent time
 works, the timestamp records the truth.
 
-## Schedule it
+## Schedule it: INSTALLED 2026-09-26 (launchd)
 
-```
-crontab -e
-30 15 * * 1-5 cd /Users/markwang/Desktop/trading_model/options_data && /usr/bin/env python collect_snapshots.py >> collect.log 2>&1
+**Coverage gap:** between 2026-07-06 and 2026-09-26 the collector was never scheduled, so
+only one day was banked. That window is permanently lost. Collection resumed 2026-09-26.
+
+The job runs weekdays at **12:30 PT (15:30 ET)** via launchd, not cron: cron on macOS can't
+read `~/Desktop` without Full Disk Access, fails silently, and skips runs while the Mac
+sleeps. launchd runs a missed slot when the Mac wakes. The job definition is kept at
+`com.markwang.options-snapshots.plist`.
+
+```bash
+# install / reload
+cp options_data/com.markwang.options-snapshots.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.markwang.options-snapshots.plist
+# status (runs, last exit code)
+launchctl print gui/$(id -u)/com.markwang.options-snapshots | grep -E "runs|last exit"
+# remove
+launchctl bootout gui/$(id -u)/com.markwang.options-snapshots
 ```
 
-(Adjust 15:30 to your local offset from ET. A missed day is a permanent hole
-— this is the one part of the repo where uptime matters.)
+Log: `options_data/collect.log`. **Check it weekly for gaps.** A day the Mac is off
+entirely is still lost; the snapshot folder date plus the UTC timestamp on every row
+record what was actually captured. The 2026-09-26 (Saturday) folder was the install
+test and holds Friday's closing chains.
 
 ## Back it up
 
