@@ -20,6 +20,7 @@ negative results, written up alongside the one edge that survived.
 | **`trend_model`** | Cross-asset time-series momentum (futures) | dev **0.61**, but roll-free replication: dev 0.31, **OOS −0.19 to +0.38 by data source** | **dev-robust, OOS unresolved** (2026-07 addendum) |
 | `factor_model` | Value/quality/momentum/low-vol/size, sector-neutral | dev **−0.12** / OOS **−0.23** (was 0.62 / 0.25 before the split + TTM data fixes) | **dead**: no edge in either window |
 | `flow_events` | Forced-flow event studies, pre-registered: (1) month-end stock/bond rebalancing, (2) Treasury month-end index extension | (1) dev t = −3.28, net SR 0.34 → OOS −0.14; (2) dev t = +3.98, net SR 0.59 → OOS −0.44 | both passed dev, both failed OOS: flows got crowded (strong 2003–13, fading 2014–24) |
+| `premia_portfolio` | Track A: covariance estimators, weighting schemes and Itô/Kelly sizing on 9 ETFs (course methods) | sample cov beats single-index/const-corr (block structure); 60/40 SR 1.04 > risk parity 0.55 (2009–24); Itô growth formula within 0.43%/yr up to 6× | not alpha; methods evidence. OOS untouched |
 | `alpha_research` | Pre-registered, mechanism-first screen: asset growth, issuance, accruals, R&D, ST reversal, index-deletion rebound | 0 of 6 pass Holm at 5% FWER (best: accruals t = −1.72) | none adopted; OOS untouched |
 | `carry_model` | Futures carry, eq+rates (KMPV via free-data proxies) | dev 0.08, **OOS −1.20** | dead (US-only carry = 2 macro bets) |
 | `vix_model` | VIX term-structure switch (VRP via ETPs) | dev 0.38 / OOS −0.01; timing LOSES to static short-vol | shelved (timing subtracts value) |
@@ -114,7 +115,8 @@ factor_research/           Fama-MacBeth, IC decay, turnover & capacity analysis
 pinn_rl/                   Physics-informed RL sleeve (RETIRED — lookahead)
 dynamic_trading/           Model-based control: identified LQ model → GP → APG (failed bars)
 alpha_research/            Pre-registered mechanism-first alpha screen (0 of 6 pass)
-flow_events/               Forced-flow event studies (month-end rebalancing: dev pass, OOS fail)
+flow_events/               Forced-flow event studies (2 studies: both dev pass, OOS fail)
+premia_portfolio/          Risk-premia portfolio construction with the course methods (Track A)
 combine_strategies.py      Risk-parity multi-sleeve combiner
 oos_report.py              Development vs true-OOS report per sleeve
 
