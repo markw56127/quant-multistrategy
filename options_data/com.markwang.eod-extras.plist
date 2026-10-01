@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.markwang.eod-extras</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/Caskroom/miniforge/base/envs/trading-model/bin/python</string>
+        <string>/Users/markwang/Desktop/trading_model/options_data/collect_extras.py</string>
+        <string>--part</string>
+        <string>estimates</string>
+        <string>etf_aum</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/markwang/Desktop/trading_model/options_data</string>
+    <!-- 14:00 Pacific = 17:00 ET, after the close, weekdays. launchd runs a missed slot on wake. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+    <key>StandardOutPath</key>
+    <string>/Users/markwang/Desktop/trading_model/options_data/collect_extras.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/markwang/Desktop/trading_model/options_data/collect_extras.log</string>
+</dict>
+</plist>

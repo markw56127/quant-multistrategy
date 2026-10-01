@@ -43,13 +43,17 @@ VIX_INDICES = ["^VIX9D", "^VIX", "^VIX3M"]
 ROOT = Path(__file__).resolve().parent / "snapshots"
 
 
-def snapshot_ticker(ticker: str, day_dir: Path, force: bool) -> None:
+def snapshot_ticker(ticker: str, day_dir: Path, force: bool, max_days: int = None) -> None:
+    """max_days: keep only expiries within this many calendar days (None = all listed)."""
     out = day_dir / f"{ticker.replace('^', '_')}.parquet"
     if out.exists() and not force:
         logger.info(f"{ticker}: already snapshotted today — skipped (--force to refresh)")
         return
     t = yf.Ticker(ticker)
     expiries = t.options
+    if max_days is not None:
+        cutoff = dt.date.today() + dt.timedelta(days=max_days)
+        expiries = [e for e in expiries if dt.date.fromisoformat(e) <= cutoff]
     if not expiries:
         logger.warning(f"{ticker}: no listed expiries returned — skipped")
         return
@@ -67,10 +71,17 @@ def snapshot_ticker(ticker: str, day_dir: Path, force: bool) -> None:
 
     frames = []
     for exp in expiries:
-        try:
-            ch = t.option_chain(exp)
-        except Exception as e:
-            logger.warning(f"{ticker} {exp}: fetch failed ({e}) — expiry skipped")
+        ch = None
+        for attempt in range(3):                       # transient Yahoo timeouts are common
+            try:
+                ch = t.option_chain(exp)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    logger.warning(f"{ticker} {exp}: fetch failed after 3 tries ({e}) — expiry skipped")
+                else:
+                    import time; time.sleep(2 * (attempt + 1))
+        if ch is None:
             continue
         for side, df in (("call", ch.calls), ("put", ch.puts)):
             if df is None or df.empty:
