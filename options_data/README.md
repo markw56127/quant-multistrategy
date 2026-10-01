@@ -46,6 +46,25 @@ entirely is still lost; the snapshot folder date plus the UTC timestamp on every
 record what was actually captured. The 2026-09-26 (Saturday) folder was the install
 test and holds Friday's closing chains.
 
+## 1-minute bars (added 2026-09-30)
+
+`collect_intraday.py` banks 1-minute OHLCV bars for **41 ETFs**: broad equity, rates and
+credit, commodities, sector SPDRs, **leveraged/inverse ETFs** (TQQQ/SQQQ, UPRO/SPXU,
+SSO/SDS, TMF/TMV, SOXL/SOXS) and vol ETPs. Yahoo keeps 1-minute history for only about
+8 trading days, so this data is lost unless banked. Its purpose is the intraday
+forced-flow studies daily data can't reach: leveraged-ETF rebalancing into the close, and
+*when* the (crowded) month-end flows now hit.
+
+- Output: `intraday/{YYYY-MM-DD}.parquet`, long format (ts_utc, ticker, OHLCV), about
+  0.35 MB/day. Git-ignored, so back it up along with `snapshots/`.
+- **Self-healing:** each run re-reads the last 7 days and writes any completed day not on
+  disk, so missed runs are filled automatically if the gap is under about a week. Today
+  is written only after 16:00 ET.
+- Backfilled at install: 2026-09-22 → 2026-09-30.
+- Schedule: launchd `com.markwang.intraday-bars`, weekdays **13:30 PT (16:30 ET, after the
+  close)**. Log: `collect_intraday.log`. Job definition: `com.markwang.intraday-bars.plist`.
+  Install, status and remove work like the snapshot job, with the label swapped.
+
 ## Back it up
 
 `snapshots/` is **git-ignored** (grows ~450 MB/yr) and is the only
