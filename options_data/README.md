@@ -85,16 +85,34 @@ First collection: 2026-09-30, gathered after the close at install time. Coverage
 S&P 500 names, 50/50 stocks, 61/61 ETFs with total assets (37 also report shares
 outstanding).
 
-### The full daily schedule (weekdays, Pacific)
+### The full daily schedule (weekdays, Pacific), revised 2026-10-07
 
-| time | job | data |
+| first run | retries | job | data |
+|---|---|---|---|
+| 12:30 | 15:00, 18:00 | `com.markwang.options-snapshots` | index/ETF chains (SPY, QQQ, IWM, SPX, VIX), VIX term structure |
+| 12:40 | 15:10, 18:10 | `com.markwang.stock-options` | 50 single-stock chains |
+| 13:30 | 18:20 | `com.markwang.intraday-bars` | 1-minute bars, 41 ETFs (also self-heals gaps under 7 days) |
+| 14:00 | 16:00, 19:00 | `com.markwang.eod-extras` | S&P 500 analyst estimates, ETF assets |
+| 19:30 | — | `com.markwang.collection-check` | **macOS notification if any feed is missing today** |
+
+- Every job runs under `caffeinate -i -s`, so a run that starts during a brief dark wake
+  holds the Mac awake until it finishes. Collectors are idempotent, so retries only fill
+  gaps. A retry capture is post-close, and every row keeps its true `fetched_utc`.
+- Logs: `~/Library/Logs/trading_model/*.log`. They were moved out of `~/Desktop` because
+  launchd silently lost write access to the Desktop log files after 2026-10-02.
+- **Missed a day?** Run `python options_data/catch_up.py` the same evening (or before the
+  next open). Chains, estimates and ETF assets are only available as *current* snapshots,
+  so a day not captured before the next session opens is gone for good. 1-minute bars and
+  the VIX daily series can be backfilled for about a week.
+- Status of all jobs: `for L in options-snapshots stock-options intraday-bars eod-extras collection-check; do launchctl print gui/$(id -u)/com.markwang.$L | grep -E "runs|last exit"; done`
+
+### Gap log
+
+| dates | what was lost | cause |
 |---|---|---|
-| 12:30 | `com.markwang.options-snapshots` | index/ETF option chains (SPY, QQQ, IWM, SPX, VIX), VIX term structure |
-| 12:40 | `com.markwang.stock-options` | 50 single-stock chains |
-| 13:30 | `com.markwang.intraday-bars` | 1-minute bars, 41 ETFs (self-heals gaps under 7 days) |
-| 14:00 | `com.markwang.eod-extras` | S&P 500 analyst estimates, ETF assets |
-
-Check all four: `for L in options-snapshots stock-options intraday-bars eod-extras; do launchctl print gui/$(id -u)/com.markwang.$L | grep -E "runs|last exit"; done`
+| 2026-07-07 → 09-25 | everything | collector never scheduled |
+| 2026-10-05 (Mon) | index + stock chains, ETF assets | Mac asleep (dark wakes only); jobs froze mid-run |
+| 2026-10-06 (Tue) | *recovered* 2026-10-07 01:00 PT from Tuesday's close (see `snapshots/2026-10-06/RECOVERED.txt`) | same |
 
 ## Back it up
 

@@ -4,8 +4,13 @@
 <dict>
     <key>Label</key>
     <string>com.markwang.stock-options</string>
+    <!-- caffeinate -i -s holds the Mac awake until the job finishes, so a run that starts
+         during a brief dark wake completes instead of freezing mid-run. -->
     <key>ProgramArguments</key>
     <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-i</string>
+        <string>-s</string>
         <string>/opt/homebrew/Caskroom/miniforge/base/envs/trading-model/bin/python</string>
         <string>/Users/markwang/Desktop/trading_model/options_data/collect_extras.py</string>
         <string>--part</string>
@@ -13,18 +18,29 @@
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/markwang/Desktop/trading_model/options_data</string>
-    <!-- 12:40 Pacific = 15:40 ET, pre-close, weekdays. launchd runs a missed slot on wake. -->
+    <!-- 12:40 PT pre-close; 15:10 and 18:10 retries. Weekdays, Pacific time. Collectors are idempotent: a retry only fills gaps. -->
     <key>StartCalendarInterval</key>
     <array>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>40</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>40</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>40</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>40</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>40</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
     </array>
+    <!-- Logs live outside ~/Desktop: launchd lost write access to Desktop log files after 2026-10-02. -->
     <key>StandardOutPath</key>
-    <string>/Users/markwang/Desktop/trading_model/options_data/collect_extras.log</string>
+    <string>/Users/markwang/Library/Logs/trading_model/stock_options.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/markwang/Desktop/trading_model/options_data/collect_extras.log</string>
+    <string>/Users/markwang/Library/Logs/trading_model/stock_options.log</string>
 </dict>
 </plist>
