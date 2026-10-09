@@ -12,7 +12,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
 INDEX = ["SPY", "QQQ", "IWM", "_SPX", "_VIX"]
@@ -31,8 +30,7 @@ def check(day: str) -> list:
         missing.append("1-minute bars")
     if not (ROOT / "estimates" / f"{day}.parquet").exists():
         missing.append("analyst estimates")
-    aum = ROOT / "etf_aum.csv"
-    if not aum.exists() or not (pd.read_csv(aum, usecols=["date"]).date == day).any():
+    if not (ROOT / "etf_aum" / f"{day}.csv").exists():      # existence only: works on iCloud-offloaded files
         missing.append("ETF assets")
     return missing
 

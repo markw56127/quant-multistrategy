@@ -100,18 +100,32 @@ def snapshot_ticker(ticker: str, day_dir: Path, force: bool, max_days: int = Non
 
 
 def append_vix_term_structure() -> None:
-    path = ROOT / "vix_term_structure.csv"
+    """Write-only: today's file holds the last 5 daily closes; readers combine and dedupe
+    (load_vix_term_structure). Never reads earlier files: Desktop is iCloud-synced, and an
+    offloaded file can't be read from a background job (EDEADLK)."""
+    d = ROOT / "vix_term_structure"
+    d.mkdir(parents=True, exist_ok=True)
     raw = yf.download(VIX_INDICES, period="5d", auto_adjust=True, progress=False)
     close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
     close = close.dropna(how="all")
     if close.empty:
         logger.warning("VIX indices: no data")
         return
-    prev = pd.read_csv(path, index_col=0, parse_dates=True) if path.exists() else pd.DataFrame()
-    merged = pd.concat([prev, close])
-    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
-    merged.to_csv(path)
-    logger.info(f"VIX term structure: {len(merged)} days on file → {path.name}")
+    out = d / f"{dt.date.today().isoformat()}.csv"
+    close.to_csv(out)
+    logger.info(f"VIX term structure: {len(close)} days → {out.relative_to(ROOT.parent)}")
+
+
+def load_vix_term_structure() -> pd.DataFrame:
+    """All VIX term-structure data: the legacy single CSV plus the per-day files, deduped
+    (the latest capture of each date wins)."""
+    parts = [pd.read_csv(p, index_col=0, parse_dates=True)
+             for p in [ROOT / "vix_term_structure.csv", *sorted((ROOT / "vix_term_structure").glob("*.csv"))]
+             if p.exists()]
+    if not parts:
+        return pd.DataFrame()
+    df = pd.concat(parts)
+    return df[~df.index.duplicated(keep="last")].sort_index()
 
 
 def main() -> None:

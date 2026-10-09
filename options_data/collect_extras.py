@@ -11,7 +11,7 @@ Daily snapshots of data whose HISTORY is not free, banked now so it exists later
                  → estimates/{date}.parquet, long format (ticker, table, period, field, value)
   etf_aum        total assets, shares outstanding, NAV and price for ~60 ETFs. Changes in
                  AUM net of returns = fund flows.
-                 → etf_aum.csv, appended daily
+                 → etf_aum/{date}.csv (one file per day; never read back)
 
 Every part is isolated (one failing does not stop the others), every ticker gets retries
 with backoff, and every part is idempotent per date (--force rewrites).
@@ -33,7 +33,7 @@ from loguru import logger
 from collect_snapshots import snapshot_ticker
 
 ROOT = Path(__file__).resolve().parent
-SNAP, EST, AUM = ROOT / "snapshots", ROOT / "estimates", ROOT / "etf_aum.csv"
+SNAP, EST, AUM = ROOT / "snapshots", ROOT / "estimates", ROOT / "etf_aum"
 SP500_CACHE = ROOT.parent / "factor_model" / "cache" / "sp500_universe.csv"
 WIKI = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
@@ -146,9 +146,12 @@ def estimates(force):
 # ─────────────────────────────────────────────────────────── ETF assets / flows
 
 def etf_aum(force):
+    """Write-only: one CSV per day. Never reads earlier files. Desktop is iCloud-synced with
+    Optimize Storage, so an offloaded file can't be read from a background job (EDEADLK)."""
     d = today()
-    prev = pd.read_csv(AUM) if AUM.exists() else pd.DataFrame()
-    if not prev.empty and (prev.date == d).any() and not force:
+    AUM.mkdir(exist_ok=True)
+    out = AUM / f"{d}.csv"
+    if out.exists() and not force:
         logger.info("etf_aum: already collected today, skipped")
         return
     rows = []
@@ -160,10 +163,9 @@ def etf_aum(force):
                      "fetched_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")})
         time.sleep(0.25)
     new = pd.DataFrame(rows)
-    out = pd.concat([prev[prev.date != d] if not prev.empty else prev, new], ignore_index=True)
-    out.to_csv(AUM, index=False)
+    new.to_csv(out, index=False)
     logger.info(f"etf_aum: {new.total_assets.notna().sum()}/{len(ETFS)} with total assets, "
-                f"{new.shares_outstanding.notna().sum()} with shares outstanding → {AUM.name}")
+                f"{new.shares_outstanding.notna().sum()} with shares outstanding → etf_aum/{out.name}")
 
 
 PARTS = {"stock_options": stock_options, "estimates": estimates, "etf_aum": etf_aum}

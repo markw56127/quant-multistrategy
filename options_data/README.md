@@ -73,7 +73,7 @@ forced-flow studies daily data can't reach: leveraged-ETF rebalancing into the c
 |---|---|---|---|
 | `stock_options` | chains for **50 liquid single stocks**, expiries ≤ 6 months (same schema as the index chains) | `snapshots/{date}/stocks/{TICKER}.parquet` (~1.9 MB/day) | `com.markwang.stock-options`, weekdays **12:40 PT**, pre-close |
 | `estimates` | **all current S&P 500 members** (list refreshed from Wikipedia each run): EPS and revenue consensus, EPS trend with its 7/30/60/90-day-ago values, revisions, recommendation counts, price targets, next earnings date. Point-in-time history is otherwise a paid product (I/B/E/S) | `estimates/{date}.parquet`, long format (~0.3 MB/day) | `com.markwang.eod-extras`, weekdays **14:00 PT** |
-| `etf_aum` | total assets, shares outstanding, NAV and price for **61 ETFs**. ΔAUM net of returns gives fund flows | `etf_aum.csv`, appended; **tracked in git** as its own backup | same job, 14:00 PT |
+| `etf_aum` | total assets, shares outstanding, NAV and price for **61 ETFs**. ΔAUM net of returns gives fund flows | `etf_aum/{date}.csv`, one file per day; **tracked in git** | same job, 14:00 PT |
 
 What each enables: cross-sectional option signals (skew, call–put IV spread) for stock
 selection; **earnings-revision** signals, the anomaly the free-data screen couldn't test;
@@ -106,12 +106,34 @@ outstanding).
   the VIX daily series can be backfilled for about a week.
 - Status of all jobs: `for L in options-snapshots stock-options intraday-bars eod-extras collection-check; do launchctl print gui/$(id -u)/com.markwang.$L | grep -E "runs|last exit"; done`
 
+### iCloud: why every collector is write-only (2026-10-08)
+
+`~/Desktop` is synced to **iCloud Drive with "Optimize Mac Storage"**, so macOS offloads
+older files to the cloud and leaves placeholders on disk. A foreground program reading a
+placeholder triggers a download automatically. A **background (launchd) job gets
+`[Errno 11] Resource deadlock avoided`** instead. That broke the ETF-assets append on
+2026-10-08 (filled the same evening), and it is the likely cause of the Desktop log
+failures after 10-02.
+
+- The upside: **all collected data is already backed up to iCloud.**
+- The rule: **collectors never read back earlier files.** Every feed writes a new file per
+  day (`snapshots/{date}/`, `intraday/{date}.parquet`, `estimates/{date}.parquet`,
+  `etf_aum/{date}.csv`, `snapshots/vix_term_structure/{date}.csv`). Idempotency and the
+  nightly check use `.exists()`, which reads only metadata and works on placeholders. Logs
+  live in `~/Library/Logs`, outside iCloud.
+- Reading for research happens in the foreground, where macOS downloads on demand. Use
+  `collect_snapshots.load_vix_term_structure()` to combine the VIX files with the legacy
+  CSV.
+- Legacy files kept: `snapshots/vix_term_structure.csv` (through 2026-10-07) and
+  `etf_aum_legacy_until_2026-10-07.csv` (already split into `etf_aum/`).
+
 ### Gap log
 
 | dates | what was lost | cause |
 |---|---|---|
 | 2026-07-07 → 09-25 | everything | collector never scheduled |
 | 2026-10-05 (Mon) | index + stock chains, ETF assets | Mac asleep (dark wakes only); jobs froze mid-run |
+| 2026-10-08 (Thu) | nothing lost: ETF assets failed at 14:00 and 16:00 (iCloud placeholder), filled at 18:14 | iCloud Optimize Storage |
 | 2026-10-06 (Tue) | *recovered* 2026-10-07 01:00 PT from Tuesday's close (see `snapshots/2026-10-06/RECOVERED.txt`) | same |
 
 ## Back it up
