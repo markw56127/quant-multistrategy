@@ -118,6 +118,8 @@ alpha_research/            Pre-registered mechanism-first alpha screen (0 of 6 p
 flow_events/               Forced-flow event studies (2 studies: both dev pass, OOS fail)
 premia_portfolio/          Risk-premia portfolio construction with the course methods (Track A)
 paper_trading/             Alpaca PAPER forward-test harness (paper-only client, ledger, shortfall)
+vol_surface/               Daily implied-vol surfaces: parity forwards, own IVs, no-arb checks, SVI
+forward_tests/             Pre-registered strictly-forward tests (EPS revisions, option skew, IV−RV)
 combine_strategies.py      Risk-parity multi-sleeve combiner
 oos_report.py              Development vs true-OOS report per sleeve
 

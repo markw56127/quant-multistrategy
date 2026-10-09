@@ -94,6 +94,7 @@ outstanding).
 | 13:30 | 18:20 | `com.markwang.intraday-bars` | 1-minute bars, 41 ETFs (also self-heals gaps under 7 days) |
 | 14:00 | 16:00, 19:00 | `com.markwang.eod-extras` | S&P 500 analyst estimates, ETF assets |
 | 19:30 | — | `com.markwang.collection-check` | **macOS notification if any feed is missing today** |
+| 15:30 | 19:15 | `com.markwang.forward-tests` | builds the day's vol surfaces (`../vol_surface`); on Wednesdays computes the pre-registered forward-test signals (`../forward_tests`) |
 
 - Every job runs under `caffeinate -i -s`, so a run that starts during a brief dark wake
   holds the Mac awake until it finishes. Collectors are idempotent, so retries only fill

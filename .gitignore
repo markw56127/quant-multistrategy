@@ -21,6 +21,7 @@ cache/
 options_data/snapshots/
 options_data/intraday/
 options_data/estimates/
+vol_surface/results/svi/
 
 # Model checkpoints (binary weights, regenerable from training)
 checkpoints/

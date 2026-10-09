@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.markwang.forward-tests</string>
+    <!-- caffeinate -i -s holds the Mac awake until the job finishes. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-i</string>
+        <string>-s</string>
+        <string>/opt/homebrew/Caskroom/miniforge/base/envs/trading-model/bin/python</string>
+        <string>/Users/markwang/Desktop/trading_model/forward_tests/daily.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/markwang/Desktop/trading_model/forward_tests</string>
+    <!-- 15:30 PT (after the 14:00 estimates job) and a 19:15 retry, weekdays: build vol surfaces;
+         on Wednesdays (Thursday fallback) also compute the pre-registered forward-test signals. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>15</integer></dict>
+    </array>
+    <key>StandardOutPath</key>
+    <string>/Users/markwang/Library/Logs/trading_model/forward_tests.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/markwang/Library/Logs/trading_model/forward_tests.log</string>
+</dict>
+</plist>
