@@ -171,6 +171,9 @@ def etf_aum(force):
 PARTS = {"stock_options": stock_options, "estimates": estimates, "etf_aum": etf_aum}
 
 if __name__ == "__main__":
+    from netwait import wait_for_network
+    if not wait_for_network():
+        raise SystemExit(1)
     ap = argparse.ArgumentParser()
     ap.add_argument("--part", nargs="+", default=list(PARTS), choices=list(PARTS))
     ap.add_argument("--force", action="store_true")

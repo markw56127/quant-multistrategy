@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parent
 INDEX = ["SPY", "QQQ", "IWM", "_SPX", "_VIX"]
 
 
+def _after_hours(path: Path, day: str) -> bool:
+    import pandas as pd
+    ts = pd.Timestamp(pd.read_parquet(path, columns=["fetched_utc"]).fetched_utc.iloc[0]).tz_convert("America/New_York")
+    return not (ts.date().isoformat() == day and (9, 30) <= (ts.hour, ts.minute) <= (16, 0))
+
+
 def check(day: str) -> list:
     missing = []
     snap = ROOT / "snapshots" / day
@@ -26,6 +32,10 @@ def check(day: str) -> list:
     n_stocks = len(list((snap / "stocks").glob("*.parquet"))) if (snap / "stocks").exists() else 0
     if n_stocks < 45:
         missing.append(f"stock chains ({n_stocks}/50)")
+    # chains must be captured during the session: after-hours quotes are stale (excluded from signals)
+    for label, p in [("index chains", snap / "_SPX.parquet"), ("stock chains", snap / "stocks" / "AAPL.parquet")]:
+        if p.exists() and _after_hours(p, day):
+            missing.append(f"{label} captured AFTER HOURS")
     if not (ROOT / "intraday" / f"{day}.parquet").exists():
         missing.append("1-minute bars")
     if not (ROOT / "estimates" / f"{day}.parquet").exists():

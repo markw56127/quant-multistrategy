@@ -129,6 +129,9 @@ def load_vix_term_structure() -> pd.DataFrame:
 
 
 def main() -> None:
+    from netwait import wait_for_network
+    if not wait_for_network():
+        raise SystemExit(1)
     ap = argparse.ArgumentParser()
     ap.add_argument("--tickers", nargs="*", default=DEFAULT_TICKERS)
     ap.add_argument("--force", action="store_true")

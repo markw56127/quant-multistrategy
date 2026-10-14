@@ -77,6 +77,9 @@ def main(force=False):
 
 
 if __name__ == "__main__":
+    from netwait import wait_for_network
+    if not wait_for_network():
+        raise SystemExit(1)
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="rewrite days already on disk")
     main(ap.parse_args().force)

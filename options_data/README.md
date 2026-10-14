@@ -89,11 +89,11 @@ outstanding).
 
 | first run | retries | job | data |
 |---|---|---|---|
-| 12:30 | 15:00, 18:00 | `com.markwang.options-snapshots` | index/ETF chains (SPY, QQQ, IWM, SPX, VIX), VIX term structure |
-| 12:40 | 15:10, 18:10 | `com.markwang.stock-options` | 50 single-stock chains |
+| 12:30 | **12:45, 12:55** (pre-close), 15:00, 18:00 | `com.markwang.options-snapshots` | index/ETF chains (SPY, QQQ, IWM, SPX, VIX), VIX term structure |
+| 12:40 | **12:50, 12:57** (pre-close), 15:10, 18:10 | `com.markwang.stock-options` | 50 single-stock chains |
 | 13:30 | 18:20 | `com.markwang.intraday-bars` | 1-minute bars, 41 ETFs (also self-heals gaps under 7 days) |
 | 14:00 | 16:00, 19:00 | `com.markwang.eod-extras` | S&P 500 analyst estimates, ETF assets |
-| 19:30 | — | `com.markwang.collection-check` | **macOS notification if any feed is missing today** |
+| 19:30 | — | `com.markwang.collection-check` | **macOS notification if any feed is missing today, or if chains were captured after hours** |
 | 15:30 | 19:15 | `com.markwang.forward-tests` | builds the day's vol surfaces (`../vol_surface`); on Wednesdays computes the pre-registered forward-test signals (`../forward_tests`) |
 
 - Every job runs under `caffeinate -i -s`, so a run that starts during a brief dark wake
@@ -128,12 +128,19 @@ failures after 10-02.
 - Legacy files kept: `snapshots/vix_term_structure.csv` (through 2026-10-07) and
   `etf_aum_legacy_until_2026-10-07.csv` (already split into `etf_aum/`).
 
+**Lid closed works, mostly.** On power, a closed Mac still wakes briefly every few minutes;
+launchd runs overdue jobs then, and `caffeinate` holds it awake until they finish. But a
+job can start before the network is up. Every collector now waits up to 5 minutes for
+Yahoo's host to resolve (`netwait.py`), and the chain jobs retry twice before the 13:00 PT
+close.
+
 ### Gap log
 
 | dates | what was lost | cause |
 |---|---|---|
 | 2026-07-07 → 09-25 | everything | collector never scheduled |
 | 2026-10-05 (Mon) | index + stock chains, ETF assets | Mac asleep (dark wakes only); jobs froze mid-run |
+| 2026-10-13 (Tue) | index chains captured **after hours** (15:06 PT), flagged and unrecoverable; stock chains fine (12:52) | lid closed: the 12:30 run started before the network was up (`curl: (6) Could not resolve host`); the next try was post-close |
 | 2026-10-08 (Thu) | nothing lost: ETF assets failed at 14:00 and 16:00 (iCloud placeholder), filled at 18:14 | iCloud Optimize Storage |
 | 2026-10-06 (Tue) | *recovered* 2026-10-07 01:00 PT from Tuesday's close (see `snapshots/2026-10-06/RECOVERED.txt`) | same |
 
