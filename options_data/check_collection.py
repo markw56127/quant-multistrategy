@@ -29,9 +29,13 @@ def check(day: str) -> list:
     lost = [t for t in INDEX if not (snap / f"{t}.parquet").exists()]
     if lost:
         missing.append(f"index chains ({', '.join(lost)})")
-    n_stocks = len(list((snap / "stocks").glob("*.parquet"))) if (snap / "stocks").exists() else 0
-    if n_stocks < 45:
-        missing.append(f"stock chains ({n_stocks}/50)")
+    have = {p.stem for p in (snap / "stocks").glob("*.parquet")} if (snap / "stocks").exists() else set()
+    from collect_extras import CORE                  # the frozen forward-test universe
+    n_core = len(have & set(CORE))
+    if n_core < 45:
+        missing.append(f"CORE stock chains ({n_core}/50)")
+    if day >= "2026-10-19" and len(have) < 400:      # S&P 500 expansion began 2026-10-19
+        missing.append(f"S&P 500 stock chains ({len(have)}/~500)")
     # chains must be captured during the session: after-hours quotes are stale (excluded from signals)
     for label, p in [("index chains", snap / "_SPX.parquet"), ("stock chains", snap / "stocks" / "AAPL.parquet")]:
         if p.exists() and _after_hours(p, day):

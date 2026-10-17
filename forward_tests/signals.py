@@ -14,6 +14,8 @@ import yfinance as yf
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent
+sys.path.insert(0, str(REPO / "options_data"))
+from collect_extras import CORE  # noqa: E402  (the frozen 50)
 EST = REPO / "options_data" / "estimates"
 PARAMS = REPO / "vol_surface" / "results" / "params"
 
@@ -39,7 +41,9 @@ def f1_revisions(day: str) -> pd.Series:
 
 def f2_f3_options(day: str) -> pd.DataFrame:
     p = pd.read_csv(PARAMS / f"{day}.csv")
-    s = p[(p.kind == "stock") & (p.capture == "regular")].set_index("underlying")   # never after-hours quotes
+    s = p[(p.kind == "stock") & (p.capture == "regular") & p.underlying.isin(CORE)].set_index("underlying")
+    # F2/F3 universe is FROZEN to the pre-registered 50 (CORE), even though the surfaces now cover
+    # the whole S&P 500 (since 2026-10-19); after-hours quotes are never used
     px = yf.download(list(s.index), end=pd.Timestamp(day) + pd.Timedelta(days=1), period=None,
                      start=pd.Timestamp(day) - pd.Timedelta(days=45), auto_adjust=True, progress=False)["Close"]
     r = np.log(px).diff().iloc[-21:]

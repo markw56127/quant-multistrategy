@@ -90,7 +90,7 @@ outstanding).
 | first run | retries | job | data |
 |---|---|---|---|
 | 12:30 | **12:45, 12:55** (pre-close), 15:00, 18:00 | `com.markwang.options-snapshots` | index/ETF chains (SPY, QQQ, IWM, SPX, VIX), VIX term structure |
-| 12:40 | **12:50, 12:57** (pre-close), 15:10, 18:10 | `com.markwang.stock-options` | 50 single-stock chains |
+| **12:00** | 12:30, 12:45, 12:57 (pre-close), 15:10, 18:10 | `com.markwang.stock-options` | single-stock chains: CORE 50 first, then the rest of the S&P 500 (~12 min) |
 | 13:30 | 18:20 | `com.markwang.intraday-bars` | 1-minute bars, 41 ETFs (also self-heals gaps under 7 days) |
 | 14:00 | 16:00, 19:00 | `com.markwang.eod-extras` | S&P 500 analyst estimates, ETF assets |
 | 19:30 | — | `com.markwang.collection-check` | **macOS notification if any feed is missing today, or if chains were captured after hours** |
@@ -143,6 +143,22 @@ close.
 | 2026-10-13 (Tue) | index chains captured **after hours** (15:06 PT), flagged and unrecoverable; stock chains fine (12:52) | lid closed: the 12:30 run started before the network was up (`curl: (6) Could not resolve host`); the next try was post-close |
 | 2026-10-08 (Thu) | nothing lost: ETF assets failed at 14:00 and 16:00 (iCloud placeholder), filled at 18:14 | iCloud Optimize Storage |
 | 2026-10-06 (Tue) | *recovered* 2026-10-07 01:00 PT from Tuesday's close (see `snapshots/2026-10-06/RECOVERED.txt`) | same |
+
+## Single-stock universe: expanded to the S&P 500 (2026-10-19)
+
+- **CORE 50** (`collect_extras.CORE`): the original hand-picked liquid names. This is the
+  **frozen universe of the pre-registered forward tests F2/F3**. They are always
+  collected first, with the original settings (≤ 6 months, all strikes). Never edit the list.
+- **Expansion:** every other current S&P 500 member (~453 names, list refreshed daily from
+  Wikipedia), trimmed to expiries ≤ 4 months and strikes within ±40% of spot. About 1
+  second per name, about 9 MB/day, about 2.3 GB/yr in iCloud.
+- **Why:** 50 names gives cross-sectional tests ~3× the noise of 500. The CORE 50 were
+  28% tech, with no utilities, real estate or materials, and chosen by 2026 popularity.
+  The full index matches the analyst-estimates universe, and it enables **implied
+  correlation** (index variance vs member variances), the quantity behind index skew
+  running ~3× stock skew.
+- Any test on the expanded universe needs its **own** pre-registration. It does not alter
+  F2/F3.
 
 ## Back it up
 

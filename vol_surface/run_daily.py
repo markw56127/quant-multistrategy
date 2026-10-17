@@ -19,6 +19,9 @@ from loguru import logger
 
 from surface import build_surface, SNAP
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "options_data"))
+from collect_extras import CORE  # noqa: E402  (the frozen forward-test 50)
+
 ROOT = Path(__file__).resolve().parent
 OUT_P, OUT_S = ROOT / "results" / "params", ROOT / "results" / "svi"
 INDEX = {"SPX": "_SPX.parquet", "SPY": "SPY.parquet", "QQQ": "QQQ.parquet", "IWM": "IWM.parquet"}
@@ -45,7 +48,7 @@ def process(day, rebuild=False):
             if s.expiries.empty or s.expiries.a.notna().sum() < 2:
                 logger.warning(f"{day} {und}: too few fitted expiries")
                 continue
-            rows.append({**s.summary(), "kind": "index" if und in INDEX else "stock"})
+            rows.append({**s.summary(), "kind": "index" if und in INDEX else "stock", "core": und in CORE})
             s.expiries.to_csv(OUT_S / day / f"{und}.csv", index=False)
         except Exception as e:
             logger.warning(f"{day} {und}: {e}")
@@ -71,7 +74,7 @@ def resummarize(day):
         regular = asof.date().isoformat() == day and (9, 30) <= (asof.hour, asof.minute) <= (16, 15) and asof.weekday() < 5
         s = Surface(und, day, float(old.loc[und, "spot"]), "regular" if regular else "after_hours",
                     pd.read_csv(f), pd.DataFrame(index=range(int(old.loc[und, "n_points"]))))
-        rows.append({**s.summary(), "kind": old.loc[und, "kind"]})
+        rows.append({**s.summary(), "kind": old.loc[und, "kind"], "core": und in CORE})
     pd.DataFrame(rows).to_csv(OUT_P / f"{day}.csv", index=False)
 
 

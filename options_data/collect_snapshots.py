@@ -43,8 +43,10 @@ VIX_INDICES = ["^VIX9D", "^VIX", "^VIX3M"]
 ROOT = Path(__file__).resolve().parent / "snapshots"
 
 
-def snapshot_ticker(ticker: str, day_dir: Path, force: bool, max_days: int = None) -> None:
-    """max_days: keep only expiries within this many calendar days (None = all listed)."""
+def snapshot_ticker(ticker: str, day_dir: Path, force: bool, max_days: int = None,
+                    strike_band: float = None) -> None:
+    """max_days: keep only expiries within this many calendar days (None = all listed).
+    strike_band: keep only strikes within ±band of spot (None = all strikes)."""
     out = day_dir / f"{ticker.replace('^', '_')}.parquet"
     if out.exists() and not force:
         logger.info(f"{ticker}: already snapshotted today — skipped (--force to refresh)")
@@ -93,10 +95,12 @@ def snapshot_ticker(ticker: str, day_dir: Path, force: bool, max_days: int = Non
         logger.warning(f"{ticker}: no chain data — nothing written")
         return
     full = pd.concat(frames, ignore_index=True)
+    if strike_band is not None and spot:
+        full = full[(full.strike / spot - 1).abs() <= strike_band]
     full["underlying"], full["spot"], full["fetched_utc"] = ticker, spot, ts
     full.to_parquet(out)
     logger.info(f"{ticker}: {len(full):,} contracts across {len(expiries)} expiries "
-                f"(spot={spot}) → {out.relative_to(ROOT.parent)}")
+                f"(spot={spot}) → {out.relative_to(ROOT.parent) if out.is_relative_to(ROOT.parent) else out}")
 
 
 def append_vix_term_structure() -> None:

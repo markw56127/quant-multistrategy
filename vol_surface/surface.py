@@ -129,28 +129,49 @@ def svi_w(k, a, b, rho, m, s):
     return a + b * (rho * (k - m) + np.sqrt((k - m) ** 2 + s ** 2))
 
 
-def fit_svi(k, w, T=None):
+def fit_svi(k, w, T=None, warm=None):
     """Fit raw SVI. With T, residuals are in implied-vol units with a soft-L1 loss (f_scale = 1
-    vol point), so isolated stale quotes cannot drag the smile. Without T, plain least squares
-    on total variance."""
+    vol point), so isolated stale quotes cannot drag the smile, and an analytic Jacobian is
+    used. Without T, plain least squares on total variance. Positivity of w is a penalty.
+    `warm`: a previous expiry's parameters, tried first (neighboring smiles are similar)."""
     iv = np.sqrt(np.maximum(w, 0) / T) if T else None
+
     def resid(p):
         a, b, rho, m, s = p
         wf = svi_w(k, *p)
         r = (np.sqrt(np.maximum(wf, 1e-12) / T) - iv) if T else (wf - w)
-        floor = a + b * s * np.sqrt(1 - rho ** 2)            # min of w(k): must be ≥ 0
-        return np.append(r, 100.0 * max(0.0, -floor))
+        return np.append(r, 100.0 * max(0.0, -(a + b * s * np.sqrt(1 - rho ** 2))))
+
+    def jac(p):
+        a, b, rho, m, s = p
+        x = k - m
+        rt = np.sqrt(x ** 2 + s ** 2)
+        dw = np.column_stack([np.ones_like(k), rho * x + rt, b * x, b * (-rho - x / rt), b * s / rt])
+        if T:
+            wf = svi_w(k, *p)
+            scale = np.where(wf > 1e-12, 1.0 / (2.0 * np.sqrt(np.maximum(wf, 1e-12) * T)), 0.0)
+            J = dw * scale[:, None]
+        else:
+            J = dw
+        q = np.sqrt(1 - rho ** 2)
+        pen = np.zeros(5)
+        if a + b * s * q < 0:
+            pen = -100.0 * np.array([1.0, s * q, -b * s * rho / q, 0.0, b * q])
+        return np.vstack([J, pen])
+
+    starts = ([list(warm)] if warm is not None else []) + \
+             [[max(w.min() * 0.5, 1e-5), 0.1, rho0, 0.0, 0.1] for rho0 in (-0.6, 0.0)]
     best = None
-    for rho0 in (-0.7, -0.3, 0.0):
-        for s0 in (0.05, 0.2):
-            x0 = [max(w.min() * 0.5, 1e-5), 0.1, rho0, 0.0, s0]
-            r = least_squares(resid, x0, bounds=([-1, 0, -0.999, -1, 1e-4], [1, 5, 0.999, 1, 2]),
-                              loss="soft_l1" if T else "linear", f_scale=0.01, max_nfev=5000)
-            a, b, rho, m, s = r.x
-            if a + b * s * np.sqrt(1 - rho ** 2) < -1e-8:                   # w ≥ 0 everywhere
-                continue
-            if best is None or r.cost < best.cost:
-                best = r
+    lo, hi = [-1, 0, -0.999, -1, 1e-4], [1, 5, 0.999, 1, 2]
+    for x0 in starts:
+        x0 = np.clip(x0, np.array(lo) + 1e-9, np.array(hi) - 1e-9)
+        r = least_squares(resid, x0, jac=jac, bounds=(lo, hi), loss="soft_l1" if T else "linear",
+                          f_scale=0.01, max_nfev=2000, x_scale="jac")
+        a, b, rho, m, s = r.x
+        if a + b * s * np.sqrt(1 - rho ** 2) < -1e-8:                       # w ≥ 0 everywhere
+            continue
+        if best is None or r.cost < best.cost:
+            best = r
     return None if best is None else best.x
 
 
@@ -249,7 +270,8 @@ def build_surface(path: Path, underlying: str, date: str, rate: float, max_days:
     d = clean(raw, asof)
     d = d[d["T"] <= max_days / 365.25]
     rows, pts = [], []
-    for exp, g in d.groupby("expiry"):
+    warm = None
+    for exp, g in sorted(d.groupby("expiry"), key=lambda eg: eg[1]["T"].iloc[0]):
         if np.isnan(spot):
             continue
         otm, F, D, how = expiry_ivs(g, spot, rate)
@@ -260,8 +282,9 @@ def build_surface(path: Path, underlying: str, date: str, rate: float, max_days:
                "s": np.nan, "rmse_vol": np.nan, "svi_ok": True}
         sel = otm[(otm.k > -0.6) & (otm.k < 0.4)]
         if len(sel) >= 6:
-            p = fit_svi(sel.k.values, sel.w.values, T)
+            p = fit_svi(sel.k.values, sel.w.values, T, warm)
             if p is not None:
+                warm = p
                 fit_iv = np.sqrt(np.maximum(svi_w(sel.k.values, *p), 0) / T)
                 rec.update(dict(zip(["a", "b", "rho", "m", "s"], p)),
                            rmse_vol=float(np.sqrt(np.mean((fit_iv - sel.iv.values) ** 2))),

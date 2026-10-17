@@ -28,6 +28,13 @@ estimates and option chains in `../options_data`).
 - **Known coverage:** about 80% of stock-days have a valid F2 (coarse strikes leave the
   rest NaN), so F2 has roughly 40 names per week.
 
+## Note (2026-10-16): the collection universe grew; the test universe did not
+
+Single-stock chains expanded from the 50 to the full S&P 500 on 2026-10-19
+(`../options_data/README.md`). **F2/F3 remain frozen to the original 50** (`CORE`).
+`signals.py` filters to them explicitly, and `test_signals.py` asserts it. Tests on
+the wider universe need a separate pre-registration.
+
 ## Protocol
 
 - **Signal dates:** each **Wednesday**, using that day's banked snapshot (estimates or

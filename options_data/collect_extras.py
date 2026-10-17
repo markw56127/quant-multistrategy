@@ -37,6 +37,8 @@ SNAP, EST, AUM = ROOT / "snapshots", ROOT / "estimates", ROOT / "etf_aum"
 SP500_CACHE = ROOT.parent / "factor_model" / "cache" / "sp500_universe.csv"
 WIKI = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
+# The CORE 50: the frozen universe of the pre-registered forward tests F2/F3 (../forward_tests).
+# Never edit this list. They are collected first, with their original settings (≤ 6 months, all strikes).
 STOCK_OPTIONS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "JPM", "V", "MA", "UNH", "XOM", "LLY",
     "JNJ", "WMT", "PG", "HD", "COST", "NFLX", "AMD", "CRM", "ORCL", "ADBE", "INTC", "QCOM", "CSCO", "BAC",
@@ -69,15 +71,24 @@ def today():
 
 # ─────────────────────────────────────────────────────────── stock options
 
+CORE = STOCK_OPTIONS
+EXPANSION_SETTINGS = {"max_days": 122, "strike_band": 0.40}      # the rest of the S&P 500 (since 2026-10-19)
+
+
 def stock_options(force):
+    """CORE 50 first with their original settings, then every other S&P 500 member, trimmed
+    to expiries ≤ 4 months and strikes within ±40% of spot."""
     d = SNAP / today() / "stocks"
     d.mkdir(parents=True, exist_ok=True)
-    ok = 0
-    for t in STOCK_OPTIONS:
-        if retry(lambda: snapshot_ticker(t, d, force, max_days=183) or True, f"options {t}"):
-            ok += 1
-        time.sleep(0.3)
-    logger.info(f"stock_options: {ok}/{len(STOCK_OPTIONS)} tickers → {d.relative_to(ROOT)}")
+    rest = [t for t in sp500_members() if t not in set(CORE)]
+    ok = {"core": 0, "sp500": 0}
+    for group, names, kw in [("core", CORE, {"max_days": 183}), ("sp500", rest, EXPANSION_SETTINGS)]:
+        for t in names:
+            if retry(lambda: snapshot_ticker(t, d, force, **kw) or True, f"options {t}"):
+                ok[group] += 1
+            time.sleep(0.3)
+        logger.info(f"stock_options {group}: {ok[group]}/{len(names)} tickers")
+    logger.info(f"stock_options: {sum(ok.values())} tickers → {d.relative_to(ROOT)}")
 
 
 # ─────────────────────────────────────────────────────────── analyst estimates

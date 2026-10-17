@@ -46,14 +46,16 @@
 
 ## Outputs (write-only per day: safe on the iCloud-synced Desktop)
 
-- `results/params/{date}.csv`: one row per underlying (SPX, SPY, QQQ, IWM and the 50
-  stocks) with the summary parameters and fit/arbitrage diagnostics
+- `results/params/{date}.csv`: one row per underlying (SPX, SPY, QQQ, IWM and the stocks:
+  the CORE 50, plus every S&P 500 member from 2026-10-19), with the summary parameters,
+  fit/arbitrage diagnostics, `capture`, and a `core` flag
 - `results/svi/{date}/{underlying}.csv`: per-expiry forward, discount factor, SVI
   parameters, fit error and checks
 
 `python run_daily.py` processes any snapshot day not yet built (`--rebuild` refits
-everything; `--resummarize` recomputes summaries from the saved SVI fits without refitting). Expect about 1 minute per index-only day and about 10 minutes per day with
-stock chains.
+everything; `--resummarize` recomputes summaries from the saved SVI fits without refitting). SVI uses an analytic Jacobian and warm starts from the neighboring expiry: about 3 s per
+stock surface (10× faster than the first version, with identical fits to 4 decimals), so
+about 20–25 minutes a day for ~500 names.
 
 ## First readings
 
